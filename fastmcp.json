@@ -1,0 +1,7 @@
+{
+  "entrypoint": "src/mcp_server.py",
+  "transport": "http",
+  "environment": {
+    "dependencies": ["playwright"]
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "_comment": "Enhanced selectors with primary, fallbacks, and validators for robust element detection",
+  "new_chat_button": {
+    "primary": "button[data-test-id='expanded-button']",
+    "fallbacks": [
+      "mat-icon[data-mat-icon-name='edit_square']",
+      "button:has-text('New chat')",
+      "[aria-label*='New chat' i]",
+      "button:has(mat-icon[data-mat-icon-name='edit_square'])"
+    ],
+    "validator": "rich-textarea .ql-editor.ql-blank"
+  },
+  "prompt_textarea": {
+    "primary": "rich-textarea .ql-editor[contenteditable='true'][role='textbox']",
+    "fallbacks": [
+      ".ql-editor[contenteditable='true']",
+      "[role='textbox'][contenteditable='true']",
+      "rich-textarea .ql-editor"
+    ]
+  },
+  "tools_button": {
+    "primary": "mat-icon[data-mat-icon-name='page_info']",
+    "fallbacks": [
+      "button:has(mat-icon[data-mat-icon-name='page_info'])",
+      "[aria-label*='Tools' i]",
+      "button:has-text('Tools')"
+    ]
+  },
+  "mode_selector": {
+    "primary": "button:has-text('Razonamiento')",
+    "fallbacks": [
+      ".mode-selector",
+      "div.logo-pill-label-container",
+      "[role='button']:has-text('Gemini')",
+      "div:has(mat-icon[data-mat-icon-name='keyboard_arrow_down'])"
+    ],
+    "dropdown_icon": "mat-icon[data-mat-icon-name='keyboard_arrow_down']",
+    "reasoning_option": "menuitem:has-text('Razonamiento')",
+    "validator": "button:has-text('Razonamiento')"
+  },
+  "canvas_button": {
+    "primary": "button.toolbox-drawer-item-list-button mat-icon[data-mat-icon-name='note_stack_add']",
+    "fallbacks": [
+      "button:has-text('Canvas')",
+      "mat-icon[data-mat-icon-name='note_stack_add']:visible",
+      "[aria-label*='Canvas' i]",
+      "button:has(mat-icon[data-mat-icon-name='note_stack_add'])"
+    ],
+    "validator": ".canvas-active, [data-tool='canvas']"
+  },
+  "deep_research_button": {
+    "primary": "[role='group'] button:has-text('Deep Research')",
+    "fallbacks": [
+      "button:has-text('Deep Research')",
+      "button:has-text('Investigación profunda')",
+      "mat-icon[data-mat-icon-name='research']:visible",
+      "[aria-label*='Deep Research' i]",
+      "[aria-label*='Investigación profunda' i]"
+    ],
+    "validator": ".deep-research-active, [data-tool='deep_research']"
+  },
+  "deep_research_confirm_button": {
+    "primary": "button[data-test-id='confirm-button']",
+    "fallbacks": [
+      "button:has-text('Confirm')",
+      "button:has-text('Confirmar')",
+      "[role='button']:has-text('Confirm')",
+      "[role='button']:has-text('Confirmar')"
+    ]
+  },
+  "deep_research_plan_ready": {
+    "primary": "button[data-test-id='confirm-button']",
+    "fallbacks": [
+      "button:has-text('Confirm')",
+      "button:has-text('Confirmar')"
+    ]
+  },
+  "send_button": {
+    "primary": "mat-icon[data-mat-icon-name='send']",
+    "fallbacks": [
+      "button:has(mat-icon[data-mat-icon-name='send'])",
+      "[aria-label*='Send' i]",
+      "[aria-label*='Enviar' i]",
+      "button[type='submit']"
+    ]
+  },
+  "last_response": {
+    "primary": ".model-response-text",
+    "fallbacks": [
+      ".response-container",
+      "[data-test-id='model-response']",
+      ".message-content",
+      ".response-text"
+    ]
+  }
+}

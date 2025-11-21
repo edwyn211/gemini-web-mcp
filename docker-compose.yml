@@ -1,0 +1,11 @@
+services:
+  gemini-agent:
+    build: .
+    container_name: gemini-agent
+    ports:
+      - "0.0.0.0:8000:8000"
+    volumes:
+      - ./auth_state.json:/app/auth_state.json:ro
+      - ./screenshots:/app/screenshots
+    environment:
+      - PYTHONUNBUFFERED=1

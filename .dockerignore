@@ -1,0 +1,6 @@
+__pycache__
+.venv
+.git
+auth_state.json
+.idea
+.vscode

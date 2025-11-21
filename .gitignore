@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Docker
+auth_state.json
+
+# IDEs
+.idea/
+.vscode/
+
+.gemini/
+logs.txt

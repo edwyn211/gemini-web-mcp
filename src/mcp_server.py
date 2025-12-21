@@ -44,24 +44,46 @@ class TaskResponse(BaseModel):
 async def setup_browser_context(p) -> tuple[BrowserContext, Page]:
     """Sets up the Playwright browser context and page"""
     if not AUTH_STATE_PATH.exists():
-        raise FileNotFoundError(
-            f"Authentication state file not found at {AUTH_STATE_PATH}. "
-            "Please run 'python auth_setup.py' first."
-        )
+         logging.warning(f"Auth file not found at {AUTH_STATE_PATH}. Attempting to run without auth (might fail).")
 
-    browser = await p.chromium.launch(headless=True)
-    context = await browser.new_context(
-        storage_state=AUTH_STATE_PATH,
-        viewport={'width': 1920, 'height': 1080}
+    logging.info("Launching browser...")
+    # Use standard launch instead of persistent context for better Docker compatibility
+    browser = await p.chromium.launch(
+        headless=True,
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--no-sandbox",
+            "--disable-infobars",
+            "--disable-dev-shm-usage",
+        ],
+        ignore_default_args=["--enable-automation"]
     )
+    
+    # Create context with storage state if available
+    context_args = {
+        'viewport': {'width': 1920, 'height': 1080},
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    
+    if AUTH_STATE_PATH.exists():
+        logging.info(f"Loading auth state from {AUTH_STATE_PATH}")
+        context_args['storage_state'] = AUTH_STATE_PATH
+        
+    context = await browser.new_context(**context_args)
     page = await context.new_page()
+    
+    # Stealth scripts
+    await page.add_init_script("""
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+    """)
     
     # Navigate to Gemini
     logging.info("Navigating to Gemini...")
-    await page.goto("https://gemini.google.com/")
     try:
+        await page.goto("https://gemini.google.com/")
         await page.wait_for_load_state("domcontentloaded", timeout=30000)
-        logging.info("Page loaded successfully.")
     except Exception as e:
         logging.warning(f"Warning: Page load issue: {e}")
     

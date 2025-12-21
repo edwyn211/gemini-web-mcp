@@ -10,20 +10,32 @@ Un agente automatizado que interactúa con la interfaz web de Gemini usando Play
 
 ## 🚀 Inicio Rápido
 
-### 1. Configurar Autenticación
+### 1. Configurar Autenticación Automatizada
 
-Antes de ejecutar el contenedor, necesitas autenticarte con tu cuenta de Google en tu máquina local:
+El sistema ahora soporta autenticación automatizada y persistencia de sesión robusta.
 
-```bash
-# Instalar dependencias locales
-pip install -r requirements.txt
-python -m playwright install chromium
+1.  **Configurar Credenciales (Opcional)**:
+    Crea o edita el archivo `.env` en la raíz del proyecto y añade tus credenciales de Google si deseas que el login sea automático.
+    ```env
+    GOOGLE_EMAIL=tu_email@gmail.com
+    GOOGLE_PASSWORD=tu_password
+    ```
 
-# Ejecutar script de autenticación
-python auth_setup.py
-```
+2.  **Iniciar Sesión Inicial**:
+    Ejecuta el script de configuración. Esto abrirá un navegador (automáticamente si configuraste el .env, o esperando tu input si no).
+    ```bash
+    # Instalar dependencias
+    pip install -r requirements.txt
+    python -m playwright install chromium
 
-Se abrirá una ventana del navegador. Inicia sesión con tu cuenta de Google y navega a Gemini. Una vez que veas la interfaz de chat, **cierra la ventana del navegador**. Esto guardará tu estado de sesión en `auth_state.json`.
+    # Ejecutar setup
+    python auth_setup.py
+    ```
+
+    El navegador se abrirá usando un **perfil persistente** guardado en `profiles/default`.
+    - Si configuraste el `.env`, el script intentará loguearse por ti.
+    - Si no, inicia sesión manualmente.
+    - Una vez veas el chat de Gemini, **cierra el navegador**. El perfil se guardará automáticamente.
 
 ### 2. Ejecutar el Servidor MCP
 
@@ -147,7 +159,7 @@ Si ves este error durante `auth_setup.py`, el script ya incluye configuraciones 
 
 Si el agente se queda esperando, especialmente después de una actualización de la web de Gemini:
 
-1.  **Verifica `auth_state.json`**: Asegúrate de que el archivo existe y no está vacío. Si lo está, ejecuta `auth_setup.py` de nuevo.
+1.  **Verifica el Perfil**: Asegúrate de que la carpeta `profiles/default` existe. Si tienes dudas, borra la carpeta `profiles` y ejecuta `python auth_setup.py` de nuevo.
 2.  **Revisa los Selectores**: El problema más común son los selectores de CSS desactualizados. La interfaz de Gemini puede cambiar, invalidando los selectores en `config/selectors.json`.
     -  Abre la web de Gemini en tu navegador.
     -  Usa las herramientas de desarrollador (F12) para inspeccionar los elementos que fallan (ej. el botón "Deep Research", el indicador de plan, etc.).
@@ -188,9 +200,9 @@ Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemen
 
 ## 🔐 Seguridad
 
-- `auth_state.json` contiene cookies de sesión sensibles y está correctamente listado en `.gitignore`.
-- **Nunca** compartas este archivo públicamente.
-- Para mayor seguridad, regenera la autenticación periódicamente ejecutando `auth_setup.py`.
+- El directorio `profiles/` contiene cookies de sesión y datos de navegador sensibles.
+- **Nunca** compartas este directorio ni lo subas al repositorio (debería estar en `.gitignore`).
+- Para mayor seguridad, borra el directorio `profiles/` y regenera la autenticación periódicamente.
 
 ## 🛠️ Desarrollo
 

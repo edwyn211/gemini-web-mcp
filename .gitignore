@@ -10,6 +10,8 @@ venv/
 
 # Docker
 auth_state.json
+profiles/
+.env
 
 # IDEs
 .idea/

@@ -121,32 +121,85 @@ class GeminiPageActions:
             await self.screenshot_manager.capture_error(self.page, "send_prompt", e)
             raise
 
+    async def get_canvas_content(self) -> str | None:
+        """
+        Attempts to retrieve content from the Canvas editor.
+        Returns None if Canvas is not visible or empty.
+        """
+        logger.info("Checking for Canvas content...")
+        try:
+            # Check if we have a canvas content selector
+            canvas_selectors = gemini_selectors.get_all_selectors("canvas_content")
+            
+            for selector in canvas_selectors:
+                elements = await self.page.query_selector_all(selector)
+                for element in elements:
+                    if await element.is_visible():
+                        content = await element.inner_text()
+                        if content and len(content.strip()) > 10:
+                            logger.info(f"✓ Found Canvas content ({len(content)} chars)")
+                            return content
+            return None
+        except Exception as e:
+            logger.debug(f"Error checking canvas: {e}")
+            return None
+
     async def get_last_response(self) -> str:
         """
         Retrieves the text content of the last response from Gemini.
+        Checks Canvas first, then main chat.
         
         :return: The text content of the last response.
         """
         logger.info("Retrieving last response...")
         
         try:
-            # Try all response selectors
+            # Wait for generation to complete
+            await self.validator.validate_generation_complete()
+            
+            # 1. First check if there is Canvas content (updates usually appear there for Canvas tasks)
+            canvas_text = await self.get_canvas_content()
+            if canvas_text:
+                logger.info("Returning Canvas content as response.")
+                return canvas_text
+
+            # 2. Try all response selectors
             response_selectors = gemini_selectors.get_all_selectors("last_response")
             
+            # Get all potential response elements first
+            candidates = []
             for selector in response_selectors:
                 try:
-                    response_elements = await self.page.query_selector_all(selector)
-                    if response_elements:
-                        last_response_element = response_elements[-1]
-                        response_text = await last_response_element.inner_text()
-                        if response_text:
-                            logger.info(f"Retrieved response: '{response_text[:100]}...'")
-                            return response_text
-                except Exception as e:
-                    logger.debug(f"Selector {selector} failed: {e}")
+                    elements = await self.page.query_selector_all(selector)
+                    candidates.extend(elements)
+                except:
                     continue
             
-            logger.warning("No response elements found with any selector")
+            # Filter and sort (assuming document order is roughly chronological)
+            # We want the last non-empty one that isn't just a status message
+            
+            valid_response = ""
+            
+            if candidates:
+                # Iterate backwards
+                for element in reversed(candidates):
+                    text = await element.inner_text()
+                    if not text:
+                        continue
+                        
+                    # Filter out known status messages if necessary
+                    if "Has parado esta respuesta" in text and len(text) < 50:
+                        logger.warning("Skipping 'Stopped response' status message")
+                        continue
+                        
+                    valid_response = text
+                    logger.info(f"Retrieved response: '{valid_response[:100]}...'")
+                    break
+            
+            if valid_response:
+                return valid_response
+            
+            logger.warning("No valid response elements found")
             return ""
             
         except Exception as e:

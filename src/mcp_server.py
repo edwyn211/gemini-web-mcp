@@ -258,6 +258,16 @@ async def execute_tasks_workflow(task_descriptions: List[str], tool: str | None 
     completed_count = len([r for r in results if r.status == "completed"])
     overall_status = "success" if completed_count == len(tasks) else "partial_success" if completed_count > 0 else "error"
     
+    # Attempt to get a specific chat URL if we are still on the root app URL
+    if gemini_page and gemini_page.url.endswith("/app"):
+        logging.info("URL is generic, waiting for update...")
+        try:
+            # Wait up to 5 seconds for URL to change to contain a chat ID
+            # Regex match for /app/[a-zA-Z0-9]+
+            await gemini_page.wait_for_url(lambda url: len(url.split("/")) > 4, timeout=5000)
+        except Exception:
+            logging.info("URL did not update to specific chat ID.")
+
     current_url = gemini_page.url if gemini_page else None
     
     return TaskResponse(

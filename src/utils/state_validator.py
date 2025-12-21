@@ -241,5 +241,45 @@ class StateValidator:
                 return False, {"status": "button_still_visible"}
             
         except Exception as e:
-            logger.error(f"✗ Error validating Deep Research confirmation: {e}")
+            return False, {"status": "error", "error": str(e)}
+    
+    async def validate_generation_complete(self, timeout: int = 120000) -> tuple[bool, dict]:
+        """
+        Validate that the generation is complete by ensuring the stop button is gone
+        and the send button is visible again.
+        
+        Args:
+            timeout: Timeout in milliseconds
+            
+        Returns:
+            (success, details)
+        """
+        try:
+            stop_button_selector = self._get_selector("stop_button")
+            send_button_selector = self._get_selector("send_button")
+            
+            # 1. Check if we are currently generating (stop button visible)
+            # We give it a small window to appear if it hasn't yet
+            try:
+                await self.page.wait_for_selector(stop_button_selector, state='attached', timeout=2000)
+                is_generating = True
+                logger.info("Generation in progress (stop button found)...")
+            except:
+                is_generating = False
+                logger.info("Stop button not found immediately, might have finished or never started.")
+
+            # 2. If generating, wait for stop button to detach
+            if is_generating:
+                logger.info("Waiting for generation to finish...")
+                await self.page.wait_for_selector(stop_button_selector, state='detached', timeout=timeout)
+                logger.info("Stop button disappeared.")
+            
+            # 3. Wait for send button to be visible again (confirmation of idle state)
+            await self.page.wait_for_selector(send_button_selector, state='visible', timeout=10000)
+            logger.info("✓ Generation complete: Send button is visible")
+            
+            return True, {"status": "complete"}
+            
+        except Exception as e:
+            logger.error(f"✗ Error validating generation completion: {e}")
             return False, {"status": "error", "error": str(e)}

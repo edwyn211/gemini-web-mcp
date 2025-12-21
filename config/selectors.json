@@ -59,6 +59,22 @@
     ],
     "validator": ".deep-research-active, [data-tool='deep_research']"
   },
+  "canvas_content": {
+    "primary": "div.canvas-editor-content",
+    "fallbacks": [
+      "text-editor .ql-editor",
+      "[data-test-id='canvas-editor']",
+      ".canvas-host-content",
+      "div[role='textbox'][contenteditable='true']:visible"
+    ]
+  },
+  "deep_research_content": {
+    "primary": "div.deep-research-report",
+    "fallbacks": [
+      ".research-report-content",
+      "[data-test-id='research-report']"
+    ]
+  },
   "deep_research_confirm_button": {
     "primary": "button[data-test-id='confirm-button']",
     "fallbacks": [
@@ -82,6 +98,15 @@
       "[aria-label*='Send' i]",
       "[aria-label*='Enviar' i]",
       "button[type='submit']"
+    ]
+  },
+  "stop_button": {
+    "primary": "button[aria-label*='Stop' i]",
+    "fallbacks": [
+      "button:has(mat-icon[data-mat-icon-name='stop_circle'])",
+      "mat-icon[data-mat-icon-name='stop_circle']",
+      "[aria-label*='Detener' i]",
+      "button:has-text('Stop generating')"
     ]
   },
   "last_response": {

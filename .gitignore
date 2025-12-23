@@ -19,3 +19,5 @@ profiles/
 
 .gemini/
 logs.txt
+screenshots/
+.trunk/

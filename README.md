@@ -102,19 +102,33 @@ Para tareas que requieren un lienzo visual, como diagramas o diseños.
 }
 ```
 
-#### Ejemplo 3: Usar Deep Research
+#### Ejemplo 3: Usar Deep Research y Monitorear
+Para investigaciones a fondo, puedes iniciar la tarea y luego monitorear su progreso sin crear nuevos chats.
 
-Para investigaciones a fondo que requieren un plan y análisis de múltiples fuentes.
-
+**Paso 1: Iniciar investigación**
 ```json
 {
   "tool": "execute_gemini_tasks",
   "arguments": {
-    "task_descriptions": ["Analiza las tendencias emergentes en el campo de la inteligencia artificial para 2025"],
+    "tasks": ["Analiza las tendencias emergentes en IA para 2025"],
     "tool": "deep_research"
   }
 }
 ```
+
+**Paso 2: Monitorear (si la respuesta fue parcial o necesitas esperar más)**
+```json
+{
+  "tool": "execute_gemini_tasks",
+  "arguments": {
+    "tasks": ["Continúa monitoreando y dame el reporte final una vez termine"],
+    "new_chat": false
+  }
+}
+```
+
+> [!IMPORTANT]
+> Al usar `new_chat: false`, el agente NO resetea la sesión. Esto es fundamental para monitorear el progreso de `deep_research` o para mantener el contexto de una conversación fluida. Por defecto, `new_chat` es `true`.
 
 > **Nota:** Al usar `deep_research`, el agente gestiona todo el flujo de forma autónoma: selecciona la herramienta, envía la consulta, espera y aprueba el plan de investigación, y finalmente espera la respuesta.
 

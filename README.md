@@ -1,3 +1,4 @@
+<!-- trunk-ignore-all(prettier) -->
 # Gemini Web MCP Agent
 
 Un agente automatizado que interactúa con la interfaz web de Gemini usando Playwright y LangGraph, diseñado para ser controlado por un LLM a través de MCP.
@@ -16,6 +17,7 @@ El sistema ahora soporta autenticación automatizada y persistencia de sesión r
 
 1.  **Configurar Credenciales (Opcional)**:
     Crea o edita el archivo `.env` en la raíz del proyecto y añade tus credenciales de Google si deseas que el login sea automático.
+
     ```env
     GOOGLE_EMAIL=tu_email@gmail.com
     GOOGLE_PASSWORD=tu_password
@@ -23,6 +25,7 @@ El sistema ahora soporta autenticación automatizada y persistencia de sesión r
 
 2.  **Iniciar Sesión Inicial**:
     Ejecuta el script de configuración. Esto abrirá un navegador (automáticamente si configuraste el .env, o esperando tu input si no).
+
     ```bash
     # Instalar dependencias
     pip install -r requirements.txt
@@ -96,16 +99,20 @@ Para tareas que requieren un lienzo visual, como diagramas o diseños.
 {
   "tool": "execute_gemini_tasks",
   "arguments": {
-    "task_descriptions": ["Crea un diagrama de arquitectura para una aplicación web de microservicios"],
+    "task_descriptions": [
+      "Crea un diagrama de arquitectura para una aplicación web de microservicios"
+    ],
     "tool": "canvas"
   }
 }
 ```
 
 #### Ejemplo 3: Usar Deep Research y Monitorear
+
 Para investigaciones a fondo, puedes iniciar la tarea y luego monitorear su progreso sin crear nuevos chats.
 
-**Paso 1: Iniciar investigación**
+##### Paso 1: Iniciar investigación
+
 ```json
 {
   "tool": "execute_gemini_tasks",
@@ -116,7 +123,8 @@ Para investigaciones a fondo, puedes iniciar la tarea y luego monitorear su prog
 }
 ```
 
-**Paso 2: Monitorear (si la respuesta fue parcial o necesitas esperar más)**
+##### Paso 2: Monitorear (si la respuesta fue parcial o necesitas esperar más)
+
 ```json
 {
   "tool": "execute_gemini_tasks",
@@ -136,7 +144,7 @@ Para investigaciones a fondo, puedes iniciar la tarea y luego monitorear su prog
 
 También puedes interactuar con el agente directamente a través de HTTP.
 
-#### Ejecutar una Tarea
+### Ejecutar una Tarea
 
 ```bash
 curl -X POST http://localhost:8000/tasks \
@@ -146,7 +154,7 @@ curl -X POST http://localhost:8000/tasks \
   }'
 ```
 
-#### Usar una Herramienta (ej. `deep_research`)
+### Usar una Herramienta (ej. `deep_research`)
 
 ```bash
 curl -X POST http://localhost:8000/tasks \
@@ -175,10 +183,10 @@ Si el agente se queda esperando, especialmente después de una actualización de
 
 1.  **Verifica el Perfil**: Asegúrate de que la carpeta `profiles/default` existe. Si tienes dudas, borra la carpeta `profiles` y ejecuta `python auth_setup.py` de nuevo.
 2.  **Revisa los Selectores**: El problema más común son los selectores de CSS desactualizados. La interfaz de Gemini puede cambiar, invalidando los selectores en `config/selectors.json`.
-    -  Abre la web de Gemini en tu navegador.
-    -  Usa las herramientas de desarrollador (F12) para inspeccionar los elementos que fallan (ej. el botón "Deep Research", el indicador de plan, etc.).
-    -  Actualiza los selectores correspondientes en `config/selectors.json` con valores únicos y estables.
-    -  Reinicia el contenedor: `docker compose up -d --build`.
+    - Abre la web de Gemini en tu navegador.
+    - Usa las herramientas de desarrollador (F12) para inspeccionar los elementos que fallan (ej. el botón "Deep Research", el indicador de plan, etc.).
+    - Actualiza los selectores correspondientes en `config/selectors.json` con valores únicos y estables.
+    - Reinicia el contenedor: `docker compose up -d --build`.
 
 ### Error Común de Selector: Ambigüedad
 
@@ -186,14 +194,14 @@ Un error frecuente es cuando un selector coincide con múltiples elementos (viol
 
 **Solución**: Haz el selector más específico.
 
--   **Mal (Ambiguo)**: `[role='menuitemradio']:has-text('Razonamiento')`
--   **Bien (Específico)**: `menu [role='menuitemradio']:has-text('Razonamiento')`
+- **Mal (Ambiguo)**: `[role='menuitemradio']:has-text('Razonamiento')`
+- **Bien (Específico)**: `menu [role='menuitemradio']:has-text('Razonamiento')`
 
 Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemento dentro del menú emergente.
 
 ## 📁 Estructura del Proyecto
 
-```
+```text
 .
 ├── src/
 │   ├── mcp_server.py           # Servidor MCP y API HTTP

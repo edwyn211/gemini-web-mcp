@@ -1,7 +1,8 @@
+# trunk-ignore-all(black)
+# trunk-ignore-all(isort)
 import asyncio
 import logging
 import os
-import time
 from pathlib import Path
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
@@ -13,45 +14,72 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 USER_DATA_DIR = Path("profiles/default")
+AUTH_STATE_FILE = Path("auth_state.json")
 
 async def login_if_needed(page, email, password):
     """
     Attempts to log in to Google if the login page is detected.
     """
     try:
-        # Check if we are on a login page or if there is a "Sign in" button
+         # Check if we are on a login page or if there is a "Sign in" button
         if "accounts.google.com" in page.url or await page.query_selector('a[href*="accounts.google.com"]'):
-            logging.info("Login required. Attempting to auto-login...")
+            logging.info("Login flow detected. Checking state...")
+
+            # Case: "Choose an account" screen
+            # Many times Google remembers the account but asks you to click it
+            try:
+                # Look for the email in the list of accounts
+                if email:
+                    account_selector = f"div[data-email='{email}']"
+                    if await page.query_selector(account_selector):
+                        logging.info(f"Found 'Choose an account' option for {email}. Clicking it...")
+                        await page.click(account_selector)
+                        await page.wait_for_load_state("networkidle")
+                        # After clicking, we might be asked for password or it might just log in
+            except Exception as e:
+                logging.debug(f"Account selection click failed (non-fatal): {e}")
+                # Continue to standard login checks
+
             
             if "accounts.google.com" not in page.url:
                  # Click sign in if we are on the landing page but not yet on the auth form
-                 await page.click('a[href*="accounts.google.com"]')
-                 await page.wait_for_load_state("networkidle")
+                 # Double check we didn't just log in via the click above
+                 if not await page.query_selector('rich-textarea'):
+                     if await page.query_selector('a[href*="accounts.google.com"]'):
+                        await page.click('a[href*="accounts.google.com"]')
+                        await page.wait_for_load_state("networkidle")
 
-            if email:
-                logging.info(f"Entering email: {email}")
-                await page.fill('input[type="email"]', email)
-                await page.click('#identifierNext')
-                await page.wait_for_timeout(2000) # Wait for animation
+            # Standard Login Form
+            if await page.query_selector('input[type="email"]'):
+                if email:
+                    logging.info(f"Entering email: {email}")
+                    await page.fill('input[type="email"]', email)
+                    await page.click('#identifierNext')
+                    await page.wait_for_timeout(2000) # Wait for animation
                 
-                if password:
-                    logging.info("Entering password...")
-                    try:
-                        await page.wait_for_selector('input[type="password"]', state="visible", timeout=10000)
-                        await page.fill('input[type="password"]', password)
-                        await page.click('#passwordNext')
-                    except Exception as e:
-                         logging.warning(f"Could not find password field (maybe 2FA or Passkey triggered first?): {e}")
+                    if password:
+                        logging.info("Entering password...")
+                        try:
+                            # Wait reasonably long for password field, but it might not show if
+                            # we are redirected to passkey/2FA immediately
+                            await page.wait_for_selector('input[type="password"]', state="visible", timeout=5000)
+                            await page.fill('input[type="password"]', password)
+                            await page.click('#passwordNext')
+                        except Exception as e:
+                            logging.warning(f"Password field not found (maybe 2FA/Passkey?): {e}")
 
-                logging.info("\nCurrent URL: " + page.url)
-                logging.info("Please complete 2FA or any other verification steps manually if asked.")
+                    logging.info("\nCurrent URL: " + page.url)
+                    logging.info("Please complete 2FA or any other verification steps manually if asked.")
+                else:
+                    logging.warning("No credentials found in .env. Please login manually.")
             else:
-                logging.warning("No credentials found in .env. Please login manually.")
+                 logging.info("No standard email field found. Attempting to detect if already logged in...")
+
         else:
             logging.info("Already logged in or on the main page.")
 
     except Exception as e:
-        logging.error(f"Auto-login attempt failed: {e}")
+        logging.error(f"Auto-login attempt failed (non-fatal): {e}")
         logging.info("Please finish logging in manually.")
 
 async def main():
@@ -77,11 +105,32 @@ async def main():
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-infobars",
+                "--disable-dev-shm-usage",
+                "--disable-browser-side-navigation",
+                "--disable-gpu",
             ],
             ignore_default_args=["--enable-automation"],
             viewport={'width': 1920, 'height': 1080}
         )
         
+        # Determine if we should load auth state manually (backup to persistent context)
+        if AUTH_STATE_FILE.exists():
+            logging.info(f"Found {AUTH_STATE_FILE}, attempting to inject cookies...")
+            try:
+                # We can't use context.storage_state(path=...) to LOAD in persistent context easily
+                # at launch args (it's for new_context).
+                # But we can add cookies manually if needed.
+                # However, persistent_context SHOULD have them if the profile dir is the same.
+                # If the user deleted the profile dir but kept auth_state.json, we can restore cookies.
+                import json
+                with open(AUTH_STATE_FILE, 'r') as f:
+                    state = json.load(f)
+                    if 'cookies' in state:
+                        await context.add_cookies(state['cookies'])
+                        logging.info(f"Restored {len(state['cookies'])} cookies from auth_state.json")
+            except Exception as e:
+                logging.warning(f"Failed to load auth_state.json: {e}")
+
         page = context.pages[0] if context.pages else await context.new_page()
         
         # Stealth scripts
@@ -108,6 +157,7 @@ async def main():
 
         # Wait indefinitely for the main chat element to verify login success
         try:
+            # We wait for 'rich-textarea' which is the main input box
             await page.wait_for_selector('rich-textarea', state="visible", timeout=0)
             logging.info("\n✅ LOGIN SUCCESSFUL! The chat interface is visible.")
             
@@ -126,15 +176,19 @@ async def main():
         logging.info("----------------------------------------------------------------")
         
         # Wait for the user to close the page/browser
+        # Wait for the user to close the page/browser
         try:
-             # Loop until the page is closed
+            # Loop until the page is closed
             while context.pages:
                 await asyncio.sleep(1)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug(f"Loop check exited (browser closed?): {e}")
 
         logging.info("Browser closed. Profile updated.")
-        await context.close()
+        try:
+            await context.close()
+        except Exception as e:
+            logging.debug(f"Error checking/closing context: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

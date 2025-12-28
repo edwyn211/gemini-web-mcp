@@ -3,7 +3,7 @@ services:
     build: .
     container_name: gemini-agent
     ports:
-      - "0.0.0.0:8000:8000"
+      - 0.0.0.0:8000:8000
     volumes:
       - ./auth_state.json:/app/auth_state.json:ro
       - ./screenshots:/app/screenshots
@@ -17,7 +17,7 @@ services:
     image: redis:alpine
     container_name: gemini-redis
     ports:
-      - "6379:6379"
+      - 6379:6379
     volumes:
       - redis_data:/data
 

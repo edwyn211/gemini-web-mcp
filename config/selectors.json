@@ -3,8 +3,11 @@
   "new_chat_button": {
     "primary": "button[data-test-id='expanded-button']",
     "fallbacks": [
+      "role=button[name*='New chat' i]",
+      "role=button[name*='Nueva conversación' i]",
       "mat-icon[data-mat-icon-name='edit_square']",
       "button:has-text('New chat')",
+      "button:has-text('Nueva conversación')",
       "[aria-label*='New chat' i]",
       "button:has(mat-icon[data-mat-icon-name='edit_square'])"
     ],
@@ -13,6 +16,8 @@
   "prompt_textarea": {
     "primary": "rich-textarea .ql-editor[contenteditable='true'][role='textbox']",
     "fallbacks": [
+      "role=textbox[name*='prompt' i]",
+      "role=textbox[name*='petición' i]",
       ".ql-editor[contenteditable='true']",
       "[role='textbox'][contenteditable='true']",
       "rich-textarea .ql-editor"
@@ -21,6 +26,8 @@
   "tools_button": {
     "primary": "mat-icon[data-mat-icon-name='page_info']",
     "fallbacks": [
+      "role=button[name*='Tools' i]",
+      "role=button[name*='Herramientas' i]",
       "button:has(mat-icon[data-mat-icon-name='page_info'])",
       "[aria-label*='Tools' i]",
       "button:has-text('Tools')"
@@ -29,6 +36,8 @@
   "mode_selector": {
     "primary": "button:has-text('Razonamiento')",
     "fallbacks": [
+      "role=button[name*='Gemini']",
+      "button:has-text('Gemini')",
       ".mode-selector",
       "div.logo-pill-label-container",
       "[role='button']:has-text('Gemini')",
@@ -41,6 +50,7 @@
   "canvas_button": {
     "primary": "button.toolbox-drawer-item-list-button mat-icon[data-mat-icon-name='note_stack_add']",
     "fallbacks": [
+      "role=button[name*='Canvas' i]",
       "button:has-text('Canvas')",
       "mat-icon[data-mat-icon-name='note_stack_add']:visible",
       "[aria-label*='Canvas' i]",
@@ -51,6 +61,8 @@
   "deep_research_button": {
     "primary": "[role='group'] button:has-text('Deep Research')",
     "fallbacks": [
+      "role=button[name*='Deep Research' i]",
+      "role=button[name*='Investigación profunda' i]",
       "button:has-text('Deep Research')",
       "button:has-text('Investigación profunda')",
       "mat-icon[data-mat-icon-name='research']:visible",
@@ -62,6 +74,7 @@
   "canvas_content": {
     "primary": "div.canvas-editor-content",
     "fallbacks": [
+      "role=textbox[name*='Canvas' i]",
       "text-editor .ql-editor",
       "[data-test-id='canvas-editor']",
       ".canvas-host-content",
@@ -71,6 +84,7 @@
   "deep_research_content": {
     "primary": "div.deep-research-report",
     "fallbacks": [
+      "role=article[name*='Research' i]",
       ".research-report-content",
       "[data-test-id='research-report']"
     ]
@@ -78,6 +92,8 @@
   "deep_research_confirm_button": {
     "primary": "button[data-test-id='confirm-button']",
     "fallbacks": [
+      "role=button[name*='Confirm' i]",
+      "role=button[name*='Confirmar' i]",
       "button:has-text('Confirm')",
       "button:has-text('Confirmar')",
       "[role='button']:has-text('Confirm')",
@@ -87,6 +103,8 @@
   "deep_research_plan_ready": {
     "primary": "button[data-test-id='confirm-button']",
     "fallbacks": [
+      "role=button[name*='Confirm' i]",
+      "role=button[name*='Confirmar' i]",
       "button:has-text('Confirm')",
       "button:has-text('Confirmar')"
     ]
@@ -94,6 +112,8 @@
   "send_button": {
     "primary": "mat-icon[data-mat-icon-name='send']",
     "fallbacks": [
+      "role=button[name*='Send' i]",
+      "role=button[name*='Enviar' i]",
       "button:has(mat-icon[data-mat-icon-name='send'])",
       "[aria-label*='Send' i]",
       "[aria-label*='Enviar' i]",
@@ -103,6 +123,8 @@
   "stop_button": {
     "primary": "button[aria-label*='Stop' i]",
     "fallbacks": [
+      "role=button[name*='Stop' i]",
+      "role=button[name*='Detener' i]",
       "button:has(mat-icon[data-mat-icon-name='stop_circle'])",
       "mat-icon[data-mat-icon-name='stop_circle']",
       "[aria-label*='Detener' i]",
@@ -112,6 +134,7 @@
   "last_response": {
     "primary": ".model-response-text",
     "fallbacks": [
+      "role=log",
       ".response-container",
       "[data-test-id='model-response']",
       ".message-content",

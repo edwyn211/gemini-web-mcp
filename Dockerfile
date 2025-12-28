@@ -22,6 +22,9 @@ COPY --chown=mcpuser:mcpuser config/ /app/config
 # Copy the rest of the application code
 COPY --chown=mcpuser:mcpuser src/ /app/src
 
+# Pre-create screenshots directory with correct permissions
+RUN mkdir -p /app/screenshots && chown mcpuser:mcpuser /app/screenshots
+
 # Switch to the non-root user
 USER mcpuser
 

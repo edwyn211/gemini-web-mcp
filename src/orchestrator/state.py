@@ -15,3 +15,6 @@ class AgentState(TypedDict):
     """
     tasks: List[Task]
     current_task_index: int
+    critic_feedback: str | None
+    requires_human_approval: bool
+    last_response: str | None

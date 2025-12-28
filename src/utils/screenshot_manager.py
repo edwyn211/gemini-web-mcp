@@ -24,12 +24,42 @@ class ScreenshotManager:
         Initialize the screenshot manager
         
         Args:
-            base_dir: Base directory for storing screenshots
+            base_dir: Preferred base directory for storing screenshots
             retention_days: Number of days to keep screenshots before cleanup
         """
-        self.base_dir = Path(base_dir)
         self.retention_days = retention_days
-        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.base_dir = self._find_writable_dir(base_dir)
+        
+        if self.base_dir:
+            logger.info(f"✓ Screenshot manager initialized. Path: {self.base_dir}")
+        else:
+            logger.warning("⚠ No writable directory found for screenshots. Captures will be disabled.")
+
+    def _find_writable_dir(self, preferred_path: str) -> Optional[Path]:
+        """Find a writable directory from a list of candidates"""
+        from os import getuid
+        import os
+        
+        # List of candidate directories in order of preference
+        candidates = [
+            Path(preferred_path).resolve(),
+            Path.home() / "gemini-mcp-screenshots",
+            Path("/tmp/gemini-mcp-screenshots")
+        ]
+        
+        for path in candidates:
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+                # Test writability
+                test_file = path / f".write_test_{getuid()}"
+                test_file.touch()
+                test_file.unlink()
+                return path
+            except Exception as e:
+                logger.debug(f"Candidate path {path} not writable: {e}")
+                continue
+                
+        return None
         
     def _get_today_dir(self) -> Path:
         """Get the directory for today's screenshots"""

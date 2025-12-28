@@ -363,10 +363,19 @@ class GeminiPageActions:
         try:
             # 1. Click the Tools button to open the menu
             logger.info("Opening tools menu...")
-            tools_button_selector = gemini_selectors.get_primary("tools_button")
-            tools_icon = self.page.locator(tools_button_selector)
-            await tools_icon.wait_for(state="attached", timeout=10000)
-            await tools_icon.locator("..").click(force=True)
+            await self._try_selectors(
+                "tools_button", action="wait", state="attached", timeout=10000
+            )
+
+            # Since we need to click the icon's parent, we find the element first
+            tools_icon = await self._try_selectors("tools_button", action="get_element")
+            if tools_icon:
+                await tools_icon.locator("..").click(force=True)
+            else:
+                # Fallback to direct click if get_element failed but _try_selectors wait passed
+                # (though this branch is unlikely given _try_selectors logic)
+                await self._try_selectors("tools_button", action="click", force=True)
+                
             await self.page.wait_for_timeout(1500)
 
             # 2. Wait for and click the specific tool
@@ -376,9 +385,12 @@ class GeminiPageActions:
             )
 
             # Click the parent button of the tool icon
-            tool_selector = gemini_selectors.get_primary(tool_field)
-            tool_icon = self.page.locator(tool_selector)
-            await tool_icon.locator("..").click(force=True)
+            tool_icon = await self._try_selectors(tool_field, action="get_element")
+            if tool_icon:
+                await tool_icon.locator("..").click(force=True)
+            else:
+                await self._try_selectors(tool_field, action="click", force=True)
+                
             await self.page.wait_for_timeout(1500)
 
             # 3. Validate tool selection

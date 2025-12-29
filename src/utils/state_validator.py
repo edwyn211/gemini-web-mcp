@@ -341,7 +341,7 @@ class StateValidator:
             # 2. Si se está generando, esperar a que el botón de detener desaparezca
             if is_generating:
                 logger.info(
-                    f"Esperando hasta {timeout/1000}s para que la generación finalice..."
+                    f"Esperando hasta {timeout / 1000}s para que la generación finalice..."
                 )
                 try:
                     # Primero intentar esperar a que el botón de detener se retire
@@ -359,7 +359,7 @@ class StateValidator:
             # 3. Esperar a que el botón de enviar sea visible de nuevo (confirmación de estado inactivo)
             try:
                 await self.page.wait_for_selector(
-                    send_button_selector, state="visible", timeout=15000
+                    send_button_selector, state="visible", timeout=60000
                 )
                 logger.info("✓ Generación completa: El botón de enviar es visible")
                 return True, {"status": "complete"}

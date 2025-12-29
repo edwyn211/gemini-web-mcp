@@ -248,10 +248,11 @@ async def execute_tasks_workflow(
                 wait_timeout = (
                     1800000 if tool and tool.lower() == "deep_research" else 300000
                 )
-                success, details = (
-                    await gemini_actions.validator.validate_generation_complete(
-                        timeout=wait_timeout
-                    )
+                (
+                    success,
+                    details,
+                ) = await gemini_actions.validator.validate_generation_complete(
+                    timeout=wait_timeout
                 )
 
                 if success:
@@ -309,7 +310,7 @@ async def execute_tasks_workflow(
             response_timeout = (
                 1800000
                 if (tool and tool.lower() == "deep_research") or skipped_prompt
-                else 120000
+                else 240000
             )
             response_text = await gemini_actions.get_last_response(
                 timeout=response_timeout, tool=tool
@@ -347,7 +348,9 @@ async def execute_tasks_workflow(
     overall_status = (
         "success"
         if completed_count == len(tasks)
-        else "partial_success" if completed_count > 0 else "error"
+        else "partial_success"
+        if completed_count > 0
+        else "error"
     )
 
     # Attempt to get a specific chat URL if we are still on the root app URL

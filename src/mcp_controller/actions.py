@@ -51,7 +51,7 @@ class GeminiPageActions:
 
         for i, selector in enumerate(selectors):
             try:
-                logger.debug(f"Trying selector {i+1}/{len(selectors)}: {selector}")
+                logger.debug(f"Trying selector {i + 1}/{len(selectors)}: {selector}")
 
                 if action == "click":
                     await self.page.click(selector, timeout=timeout, **kwargs)
@@ -76,13 +76,30 @@ class GeminiPageActions:
 
             except Exception as e:
                 last_error = e
-                logger.debug(f"Selector {i+1} failed: {e}")
+                logger.debug(f"Selector {i + 1} failed: {e}")
                 continue
 
         # All selectors failed
         error_msg = (
             f"All selectors failed for {selector_field}. Last error: {last_error}"
         )
+
+        # Check for specific "Session Ended" overlay which often intercepts clicks
+        try:
+            # Common selector for the session ended dialog title
+            session_ended = await self.page.query_selector("h1.mat-mdc-dialog-title")
+            if session_ended:
+                text = await session_ended.inner_text()
+                if (
+                    "cerrado tu sesión" in text
+                    or "signed out" in text
+                    or "session expired" in text
+                ):
+                    error_msg = "CRITICAL: Session expired (Se ha cerrado tu sesión). Please refresh auth_state.json"
+                    logger.critical(error_msg)
+        except Exception:
+            pass
+
         logger.error(error_msg)
         await self.screenshot_manager.capture_error(
             self.page,
@@ -115,10 +132,19 @@ class GeminiPageActions:
             await self._try_selectors("prompt_textarea", action="click")
             await self.page.wait_for_timeout(2000)
 
-            # Type the text
+            # Type the text - OPTIMIZED: Use evaluate for instant insertion to avoid timeouts with large prompts
             textarea_selector = gemini_selectors.get_primary("prompt_textarea")
-            await self.page.type(textarea_selector, text)
-            await self.page.wait_for_timeout(3000)
+
+            # Use locator.evaluate to handle the DOM element directly, avoiding selector parsing issues in JS
+            # This simulates a "paste" operation by setting innerText and triggering input
+            locator = self.page.locator(textarea_selector)
+            await locator.evaluate(
+                "(el, text) => { el.innerText = text; el.dispatchEvent(new Event('input', { bubbles: true })); }",
+                text,
+            )
+
+            # waiting for valid state after "paste"
+            await self.page.wait_for_timeout(1000)
 
             logger.info("Clicking send button...")
             await self._try_selectors("send_button", action="click")
@@ -219,7 +245,7 @@ class GeminiPageActions:
             return None
 
     async def get_last_response(
-        self, timeout: int = 120000, tool: str | None = None
+        self, timeout: int = 240000, tool: str | None = None
     ) -> str:
         """
         Recupera el contenido de texto de la última respuesta de Gemini.
@@ -294,6 +320,17 @@ class GeminiPageActions:
                         continue
 
                     valid_response = text
+
+                    # Clean up UI artifacts
+                    if "Ver razonamiento" in valid_response:
+                        valid_response = valid_response.replace(
+                            "Ver razonamiento", ""
+                        ).strip()
+                    if "Mostrar borradores" in valid_response:
+                        valid_response = valid_response.replace(
+                            "Mostrar borradores", ""
+                        ).strip()
+
                     logger.info(f"Retrieved response: '{valid_response[:100]}...'")
                     break
 
@@ -375,7 +412,7 @@ class GeminiPageActions:
                 # Fallback to direct click if get_element failed but _try_selectors wait passed
                 # (though this branch is unlikely given _try_selectors logic)
                 await self._try_selectors("tools_button", action="click", force=True)
-                
+
             await self.page.wait_for_timeout(1500)
 
             # 2. Wait for and click the specific tool
@@ -390,7 +427,7 @@ class GeminiPageActions:
                 await tool_icon.locator("..").click(force=True)
             else:
                 await self._try_selectors(tool_field, action="click", force=True)
-                
+
             await self.page.wait_for_timeout(1500)
 
             # 3. Validate tool selection

@@ -14,7 +14,6 @@ from starlette.responses import JSONResponse
 import os
 import redis.asyncio as redis
 import uuid
-import json
 
 from mcp_controller.actions import GeminiPageActions
 from orchestrator.state import AgentState, Task

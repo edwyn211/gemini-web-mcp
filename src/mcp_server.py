@@ -107,6 +107,37 @@ class TaskResponse(BaseModel):
     )
 
 
+class StatusRequest(BaseModel):
+    """Request model for checking task status."""
+
+    request_id: str = Field(..., description="The unique ID of the task request to check.")
+    offset: int = Field(
+        0, description="Character offset for the result text (useful for pagination)."
+    )
+    max_chars: int = Field(
+        100000, description="Maximum number of characters to return in each result."
+    )
+
+
+class StatusResponse(BaseModel):
+    """Response model for task status check."""
+
+    status: str = Field(
+        ...,
+        description="Status of the request ('processing', 'success', 'partial_success', 'error', 'not_found')",
+    )
+    is_generating: bool = Field(
+        False, description="Whether the browser is currently generating a response."
+    )
+    tasks_completed: int = Field(0, description="Count of successfully completed tasks")
+    total_tasks: int = Field(0, description="Total number of tasks in the request")
+    results: List[TaskResult] = Field(
+        ..., description="Results for each task, potentially truncated."
+    )
+    chat_url: str | None = Field(None, description="URL of the Gemini chat session.")
+    message: str | None = Field(None, description="Detailed status message.")
+
+
 async def setup_browser_context(p) -> tuple[BrowserContext, Page]:
     """Sets up the Playwright browser context and page"""
     if not AUTH_STATE_PATH.exists():
@@ -178,7 +209,26 @@ async def execute_tasks_workflow(
     # Create tasks from descriptions
     tasks = [Task(description=desc, completed=False) for desc in task_descriptions]
 
+    request_id = str(uuid.uuid4())
     initial_state: AgentState = {"tasks": tasks, "current_task_index": 0}
+
+    # Initial save to Redis with 'processing' status
+    try:
+        r = await get_redis()
+        initial_response = TaskResponse(
+            status="processing",
+            message=f"Starting processing of {len(tasks)} tasks.",
+            tasks_completed=0,
+            total_tasks=len(tasks),
+            results=[],
+            request_id=request_id,
+        )
+        await r.setex(
+            f"gemini:response:{request_id}", 86400, initial_response.model_dump_json()
+        )
+        logging.info(f"✅ Task initialized in Redis with ID: {request_id}")
+    except Exception as e:
+        logging.error(f"❌ Failed to initialize task in Redis: {e}")
 
     # Execute workflow
     results = []
@@ -369,22 +419,9 @@ async def execute_tasks_workflow(
         else "error"
     )
 
-    # Attempt to get a specific chat URL if we are still on the root app URL
-    if gemini_page and gemini_page.url.endswith("/app"):
-        logging.info("URL is generic, waiting for update...")
-        try:
-            # Wait up to 5 seconds for URL to change to contain a chat ID
-            # Regex match for /app/[a-zA-Z0-9]+
-            await gemini_page.wait_for_url(
-                lambda url: len(url.split("/")) > 4, timeout=5000
-            )
-        except Exception:
-            logging.info("URL did not update to specific chat ID.")
-
     current_url = gemini_page.url if gemini_page else None
 
-    # Save to Redis
-    request_id = str(uuid.uuid4())
+    # Save final result to Redis
     try:
         r = await get_redis()
         # Store result for 24 hours
@@ -400,11 +437,9 @@ async def execute_tasks_workflow(
         await r.setex(
             f"gemini:response:{request_id}", 86400, response_model.model_dump_json()
         )
-        logging.info(f"✅ Response saved to Redis with ID: {request_id}")
+        logging.info(f"✅ Final response saved to Redis with ID: {request_id}")
     except Exception as e:
-        logging.error(f"❌ Failed to save to Redis: {e}")
-        # Proceed without Redis info if it fails
-        request_id = None
+        logging.error(f"❌ Failed to save final response to Redis: {e}")
 
     return TaskResponse(
         status=overall_status,
@@ -464,6 +499,100 @@ async def execute_gemini_tasks(
             total_tasks=len(tasks),
             results=[],
         )
+
+
+@mcp.tool()
+async def get_gemini_task_status(
+    request_id: str, offset: int = 0, max_chars: int = 100000
+) -> StatusResponse:
+    """
+    Retrieve the status or results of a previously started Gemini task.
+
+    GUIDANCE FOR THE LLM:
+    - Use this tool when you have a `request_id` and need to:
+        1. Monitor a long-running 'deep_research' or Canvas task.
+        2. Retrieve a response that was too large to be fully returned (use `offset` and `max_chars`).
+        3. Check if a task that timed out has completed in the background.
+    - If the status is 'processing', you can call this tool again after a short delay.
+    - If a result is truncated, increase the `offset` in subsequent calls to read more.
+
+    Args:
+        request_id: The unique ID returned when the task was started.
+        offset: Character index to start reading from (for large responses).
+        max_chars: Maximum number of characters to return for each task result.
+
+    Returns:
+        StatusResponse containing the status, current generation state, and results (potentially truncated).
+    """
+    return await execute_get_gemini_task_status(request_id, offset, max_chars)
+
+
+async def execute_get_gemini_task_status(
+    request_id: str, offset: int = 0, max_chars: int = 100000
+) -> StatusResponse:
+    """Implementation of get_gemini_task_status for testing and internal use."""
+    try:
+        r = await get_redis()
+        data = await r.get(f"gemini:response:{request_id}")
+
+        if not data:
+            return StatusResponse(
+                status="not_found",
+                message=f"No task found with ID {request_id}",
+                results=[],
+            )
+
+        task_response = TaskResponse.model_validate_json(data)
+        is_gen = False
+
+        # If it's still processing, check the actual browser state if possible
+        if task_response.status == "processing" and gemini_actions:
+            try:
+                is_gen = await gemini_actions.is_generating()
+            except Exception:
+                pass
+
+        # Apply offset and max_chars to results
+        processed_results = []
+        for res in task_response.results:
+            new_res = res.model_copy()
+            if new_res.result:
+                full_text = new_res.result
+                text_len = len(full_text)
+
+                if offset < text_len:
+                    end = min(offset + max_chars, text_len)
+                    new_res.result = full_text[offset:end]
+
+                    # Add metadata about truncation
+                    if not new_res.metadata:
+                        new_res.metadata = {}
+                    new_res.metadata["total_length"] = text_len
+                    new_res.metadata["offset"] = offset
+                    new_res.metadata["truncated"] = end < text_len
+                else:
+                    new_res.result = ""
+                    if not new_res.metadata:
+                        new_res.metadata = {}
+                    new_res.metadata["total_length"] = text_len
+                    new_res.metadata["offset"] = offset
+                    new_res.metadata["error"] = "Offset out of bounds"
+
+            processed_results.append(new_res)
+
+        return StatusResponse(
+            status=task_response.status,
+            is_generating=is_gen,
+            tasks_completed=task_response.tasks_completed,
+            total_tasks=task_response.total_tasks,
+            results=processed_results,
+            chat_url=task_response.chat_url,
+            message=task_response.message,
+        )
+
+    except Exception as e:
+        logging.exception(f"Error checking task status for {request_id}")
+        return StatusResponse(status="error", message=str(e), results=[])
 
 
 @mcp.custom_route("/tasks", methods=["POST"])

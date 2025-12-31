@@ -286,7 +286,22 @@ class GeminiPageActions:
                     return canvas_text
 
             # 2. Si no es herramienta específica o no se encontró contenido, buscar en el chat normal
-            # Pero también probar Deep Research y Canvas como respaldo si fallan los selectores normales
+
+            # Check for "Show more" buttons before grabbing text
+            try:
+                # Check for explicit "Show more" buttons
+                show_more_selectors = gemini_selectors.get_all_selectors("show_more")
+                for selector in show_more_selectors:
+                    try:
+                        show_more_btn = await self.page.query_selector(selector)
+                        if show_more_btn and await show_more_btn.is_visible():
+                            logger.info("Found 'Show more' button, clicking...")
+                            await show_more_btn.click()
+                            await self.page.wait_for_timeout(2000)  # Wait for expansion
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug(f"Error checking show more buttons: {e}")
 
             # Probar selectores de respuesta normales
             response_selectors = gemini_selectors.get_all_selectors("last_response")
@@ -310,13 +325,22 @@ class GeminiPageActions:
             if candidates:
                 # Iterate backwards
                 for element in reversed(candidates):
-                    text = await element.inner_text()
+                    # Try to get inner_text
+                    try:
+                        text = await element.inner_text()
+                    except Exception:
+                        continue
+
                     if not text:
                         continue
 
                     # Filter out known status messages if necessary
                     if "Has parado esta respuesta" in text and len(text) < 50:
                         logger.warning("Skipping 'Stopped response' status message")
+                        continue
+
+                    # If response is very short, maybe it's not the real one, check previous
+                    if len(text.strip()) < 5:
                         continue
 
                     valid_response = text

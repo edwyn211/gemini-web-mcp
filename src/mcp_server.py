@@ -11,6 +11,10 @@ from playwright.async_api import (
 )
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
+import os
+import redis.asyncio as redis
+import uuid
+import json
 
 from mcp_controller.actions import GeminiPageActions
 from orchestrator.state import AgentState, Task
@@ -31,6 +35,16 @@ browser_context: BrowserContext = None
 gemini_page: Page = None
 gemini_actions: GeminiPageActions = None
 screenshot_manager: ScreenshotManager = None
+redis_client: redis.Redis = None
+
+
+async def get_redis() -> redis.Redis:
+    """Get or initialize Redis client"""
+    global redis_client
+    if redis_client is None:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_client = redis.from_url(redis_url, decode_responses=True)
+    return redis_client
 
 
 class TaskRequest(BaseModel):
@@ -89,6 +103,9 @@ class TaskResponse(BaseModel):
         None, description="Total execution time in seconds"
     )
     chat_url: str | None = Field(None, description="URL of the Gemini chat session")
+    request_id: str | None = Field(
+        None, description="Unique ID for retrieval via Redis"
+    )
 
 
 async def setup_browser_context(p) -> tuple[BrowserContext, Page]:
@@ -367,6 +384,29 @@ async def execute_tasks_workflow(
 
     current_url = gemini_page.url if gemini_page else None
 
+    # Save to Redis
+    request_id = str(uuid.uuid4())
+    try:
+        r = await get_redis()
+        # Store result for 24 hours
+        response_model = TaskResponse(
+            status=overall_status,
+            message=f"Processed {len(results)} tasks. {completed_count}/{len(tasks)} successful.",
+            tasks_completed=completed_count,
+            total_tasks=len(tasks),
+            results=results,
+            chat_url=current_url,
+            request_id=request_id,
+        )
+        await r.setex(
+            f"gemini:response:{request_id}", 86400, response_model.model_dump_json()
+        )
+        logging.info(f"✅ Response saved to Redis with ID: {request_id}")
+    except Exception as e:
+        logging.error(f"❌ Failed to save to Redis: {e}")
+        # Proceed without Redis info if it fails
+        request_id = None
+
     return TaskResponse(
         status=overall_status,
         message=f"Processed {len(results)} tasks. {completed_count}/{len(tasks)} successful.",
@@ -374,6 +414,7 @@ async def execute_tasks_workflow(
         total_tasks=len(tasks),
         results=results,
         chat_url=current_url,
+        request_id=request_id,
     )
 
 

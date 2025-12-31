@@ -8,6 +8,7 @@ Un agente automatizado que interactúa con la interfaz web de Gemini usando Play
 - Docker y Docker Compose
 - Python 3.11+ (solo para configuración inicial de autenticación)
 - Cuenta de Google con acceso a Gemini
+- Servidor Redis (incluido en docker-compose) para persistencia de respuestas
 
 ## 🚀 Inicio Rápido
 
@@ -21,6 +22,7 @@ El sistema ahora soporta autenticación automatizada y persistencia de sesión r
     ```env
     GOOGLE_EMAIL=tu_email@gmail.com
     GOOGLE_PASSWORD=tu_password
+    REDIS_URL=redis://localhost:6379/0  # Opcional, por defecto localhost para local, 'redis' para docker
     ```
 
 2.  **Iniciar Sesión Inicial**:

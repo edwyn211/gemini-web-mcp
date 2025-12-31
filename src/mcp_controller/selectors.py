@@ -83,6 +83,10 @@ class GeminiSelectors(BaseModel):
     stop_button: Union[str, SelectorConfig] = Field(
         ..., description="Selector for the stop/cancel button during generation."
     )
+    show_more: Union[str, SelectorConfig] = Field(
+        ...,
+        description="Selector for the 'Show more' button to expand truncated responses.",
+    )
 
     @field_validator("*", mode="before")
     @classmethod

@@ -140,14 +140,5 @@
       ".message-content",
       ".response-text"
     ]
-  },
-  "show_more": {
-    "primary": "button:has-text('Submit')",
-    "fallbacks": [
-      "button:has-text('Show more')",
-      "button:has-text('Mostrar más')",
-      "button:has-text('Show more drafts')",
-      "button:has-text('View details')"
-    ]
   }
 }

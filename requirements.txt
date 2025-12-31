@@ -3,3 +3,4 @@ langgraph
 pydantic
 python-dotenv
 fastmcp
+redis

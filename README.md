@@ -42,6 +42,22 @@ El sistema ahora soporta autenticación automatizada y persistencia de sesión r
     - Si no, inicia sesión manualmente.
     - Una vez veas el chat de Gemini, **cierra el navegador**. El perfil se guardará automáticamente.
 
+3.  **Configuración en Servidor Remoto (SSH/Headless)**:
+    Si estás instalando esto en un servidor sin entorno gráfico, tienes dos opciones:
+
+    - **Opción A (Recomendada - Virtual Display)**: Usa el script `run_auth_remote.sh` que utiliza `xvfb-run`.
+      ```bash
+      sudo apt-get update && sudo apt-get install -y xvfb
+      ./run_auth_remote.sh
+      ```
+      El script tomará capturas de pantalla periódicas en el directorio `screenshots/` para que puedas ver el progreso y si se requiere interacción manual (ej. 2FA).
+
+    - **Opción B (Headless)**: Ejecuta el script con el flag `--headless`.
+      ```bash
+      python auth_setup.py --headless
+      ```
+      *Nota: Esto requiere que `GOOGLE_EMAIL` y `GOOGLE_PASSWORD` estén configurados en el `.env`.*
+
 ### 2. Ejecutar el Servidor MCP
 
 ```bash
@@ -54,93 +70,41 @@ docker compose logs -f gemini-agent
 
 El servidor estará disponible en `http://localhost:8000`.
 
-## 🛠️ Uso como Herramienta LLM (MCP)
-
-El principal modo de uso es como una herramienta para un LLM. El agente expone un servidor MCP que permite al LLM ejecutar tareas en Gemini.
-
-### Configuración
-
-Añade el agente a la configuración de tu cliente MCP (ej. `settings.json`):
-
-```json
-{
-  "mcpServers": {
-    "gemini-agent": {
-      "httpUrl": "http://localhost:8000/mcp",
-      "transport": "http"
-    }
-  }
-}
 ```
 
-### Tool Disponible: `execute_gemini_tasks`
+### Herramientas Disponibles
 
-Esta única herramienta permite realizar consultas simples o invocar las herramientas especiales de Gemini.
+El agente expone varias herramientas para interactuar con Gemini. Para una guía detallada, consulta la [Referencia de Herramientas](doc/TOOLS.md).
 
-#### Ejemplo 1: Consulta Simple
-
-Para una pregunta directa a Gemini sin herramientas adicionales.
+#### 1. Ejecución de Tareas: `execute_gemini_tasks`
+Permite realizar consultas simples o invocar herramientas especiales de Gemini.
 
 ```json
 {
   "tool": "execute_gemini_tasks",
   "arguments": {
-    "task_descriptions": [
-      "Explica qué es la computación cuántica en términos sencillos",
-      "Ahora, crea una analogía para un niño de 10 años"
-    ]
-  }
-}
-```
-
-#### Ejemplo 2: Usar Canvas
-
-Para tareas que requieren un lienzo visual, como diagramas o diseños.
-
-```json
-{
-  "tool": "execute_gemini_tasks",
-  "arguments": {
-    "task_descriptions": [
-      "Crea un diagrama de arquitectura para una aplicación web de microservicios"
-    ],
-    "tool": "canvas"
-  }
-}
-```
-
-#### Ejemplo 3: Usar Deep Research y Monitorear
-
-Para investigaciones a fondo, puedes iniciar la tarea y luego monitorear su progreso sin crear nuevos chats.
-
-##### Paso 1: Iniciar investigación
-
-```json
-{
-  "tool": "execute_gemini_tasks",
-  "arguments": {
-    "tasks": ["Analiza las tendencias emergentes en IA para 2025"],
+    "tasks": ["Crea un resumen de las noticias de hoy"],
     "tool": "deep_research"
   }
 }
 ```
 
-##### Paso 2: Monitorear (si la respuesta fue parcial o necesitas esperar más)
+#### 2. Control Visual: `take_gemini_screenshot`
+Captura una imagen visual de la sesión actual para depuración o verificación.
 
-```json
-{
-  "tool": "execute_gemini_tasks",
-  "arguments": {
-    "tasks": ["Continúa monitoreando y dame el reporte final una vez termine"],
-    "new_chat": false
-  }
-}
-```
+#### 3. Gestión de Archivos: `upload_file_to_gemini`
+Sube archivos locales directamente al prompt de Gemini. Ideal para análisis de logs, imágenes o documentos.
+
+#### 4. Navegación: `list_gemini_chats` y `switch_gemini_chat`
+Lista y cambia entre conversaciones existentes en tu historial.
+
+#### 5. Monitoreo: `get_gemini_task_status` y `get_gemini_session_status`
+Consulta el progreso de tareas largas o verifica si la sesión sigue activa.
 
 > [!IMPORTANT]
-> Al usar `new_chat: false`, el agente NO resetea la sesión. Esto es fundamental para monitorear el progreso de `deep_research` o para mantener el contexto de una conversación fluida. Por defecto, `new_chat` es `true`.
+> Al usar `new_chat: false` en `execute_gemini_tasks`, el agente NO resetea la sesión. Esto es fundamental para monitorear el progreso de `deep_research` o para mantener el contexto de una conversación fluida. Por defecto, `new_chat` es `true`.
 
-> **Nota:** Al usar `deep_research`, el agente gestiona todo el flujo de forma autónoma: selecciona la herramienta, envía la consulta, espera y aprueba el plan de investigación, y finalmente espera la respuesta.
+---
 
 ## 🌐 Uso Alternativo: API HTTP (curl)
 
@@ -213,6 +177,11 @@ Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemen
 │   └── orchestrator/
 │       ├── graph.py            # Orquestación del workflow con LangGraph
 │       └── state.py            # Definición del estado del agente
+├── doc/
+│   ├── TOOLS.md                # Referencia detallada de herramientas
+│   ├── ARCHITECTURE.md         # Resumen de arquitectura y flujo
+│   ├── OPTIMIZATION.md         # Mejores prácticas y optimización
+│   └── NATURAL_LANGUAGE.md     # Guía de uso con lenguaje natural
 ├── config/
 │   └── selectors.json          # Selectores CSS (la parte más frágil)
 ├── auth_setup.py               # Script para generar auth_state.json

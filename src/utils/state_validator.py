@@ -312,6 +312,7 @@ class StateValidator:
         try:
             stop_button_selector = self._get_selector("stop_button")
             send_button_selector = self._get_selector("send_button")
+            mic_button_selector = self._get_selector("mic_button")
 
             # 1. Verificar si se está generando actualmente (botón de stop visible)
             # Damos una pequeña ventana para que aparezca si aún no lo ha hecho
@@ -327,15 +328,21 @@ class StateValidator:
                 )
             except Exception:
                 # También verificar si el botón de enviar NO es visible como indicador de actividad
+                # Y tampoco el botón de micrófono (ambos ausentes suele significar actividad)
                 send_button = await self.page.query_selector(send_button_selector)
-                if send_button and not await send_button.is_visible():
+                mic_button = await self.page.query_selector(mic_button_selector)
+                
+                send_visible = send_button and await send_button.is_visible()
+                mic_visible = mic_button and await mic_button.is_visible()
+
+                if not send_visible and not mic_visible:
                     is_generating = True
                     logger.info(
-                        "El botón de enviar no es visible, asumiendo generación en progreso..."
+                        "Ni el botón de enviar ni el de micrófono son visibles, asumiendo generación en progreso..."
                     )
                 else:
                     logger.info(
-                        "No se encontró el botón de detener y el botón de enviar es visible. Asumiendo inactivo o ya terminado."
+                        "Botón de enviar o micrófono visible. Asumiendo inactivo o ya terminado."
                     )
 
             # 2. Si se está generando, esperar a que el botón de detener desaparezca
@@ -351,23 +358,25 @@ class StateValidator:
                     logger.info("El botón de detener desapareció.")
                 except Exception as e:
                     # Si falla la espera del botón de detener, ¿quizás ya terminó?
-                    # Verificar si el botón de enviar regresó.
+                    # Verificar si el botón de enviar o micro regresó.
                     logger.warning(
-                        f"Expiró la espera para que el botón de detener se retire: {e}. Verificando botón de enviar..."
+                        f"Expiró la espera para que el botón de detener se retire: {e}. Verificando botones de estado inactivo..."
                     )
 
-            # 3. Esperar a que el botón de enviar sea visible de nuevo (confirmación de estado inactivo)
+            # 3. Esperar a que el botón de enviar o de micro sea visible de nuevo (confirmación de estado inactivo)
             try:
+                # Combinamos ambos selectores para esperar a cualquiera de los dos
+                idle_selector = f"{send_button_selector}, {mic_button_selector}"
                 await self.page.wait_for_selector(
-                    send_button_selector, state="visible", timeout=60000
+                    idle_selector, state="visible", timeout=60000
                 )
-                logger.info("✓ Generación completa: El botón de enviar es visible")
+                logger.info("✓ Generación completa: Botón de estado inactivo detectado (enviar o micro)")
                 return True, {"status": "complete"}
             except Exception as e:
-                logger.error(f"✗ El botón de enviar no reapareció: {e}")
+                logger.error(f"✗ Ningún botón de estado inactivo (enviar/micro) reapareció: {e}")
                 return False, {
                     "status": "error",
-                    "error": f"El botón de enviar no reapareció: {str(e)}",
+                    "error": f"El botón de estado inactivo no reapareció: {str(e)}",
                 }
 
         except Exception as e:

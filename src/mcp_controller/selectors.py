@@ -59,6 +59,9 @@ class GeminiSelectors(BaseModel):
     send_button: Union[str, SelectorConfig] = Field(
         ..., description="Selector for the button to send the prompt."
     )
+    mic_button: Union[str, SelectorConfig] = Field(
+        ..., description="Selector for the microphone button (idle state)."
+    )
     last_response: Union[str, SelectorConfig] = Field(
         ..., description="Selector to grab the last response from Gemini."
     )

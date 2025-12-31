@@ -1,4 +1,6 @@
 import logging
+from pathlib import Path
+from typing import Dict, List
 
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -136,19 +138,34 @@ class GeminiPageActions:
             textarea_selector = gemini_selectors.get_primary("prompt_textarea")
 
             # Use locator.evaluate to handle the DOM element directly, avoiding selector parsing issues in JS
-            # This simulates a "paste" operation by setting innerText and triggering input
+            # This simulates a "paste" operation by setting innerText and triggering multiple events
             locator = self.page.locator(textarea_selector)
             await locator.evaluate(
-                "(el, text) => { el.innerText = text; el.dispatchEvent(new Event('input', { bubbles: true })); }",
+                """(el, text) => { 
+                    el.innerText = text; 
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    el.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+                    el.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+                }""",
                 text,
             )
 
-            # waiting for valid state after "paste"
-            await self.page.wait_for_timeout(1000)
+            # waiting for valid state after "paste" and for UI to update (mic -> send)
+            await self.page.wait_for_timeout(1500)
+            
+            # Wait specifically for the send button to become visible
+            logger.info("Waiting for send button to appear...")
+            try:
+                send_selectors = gemini_selectors.get_all_selectors("send_button")
+                primary_send = send_selectors[0]
+                await self.page.wait_for_selector(primary_send, state="visible", timeout=5000)
+            except Exception:
+                logger.warning("Send button not visible after typing, attempting to click anyway...")
 
             logger.info("Clicking send button...")
             await self._try_selectors("send_button", action="click")
-            await self.page.wait_for_timeout(5000)
+            await self.page.wait_for_timeout(3000)
 
             # Validate response is ready
             success, details = await self.validator.validate_response_ready(
@@ -177,15 +194,24 @@ class GeminiPageActions:
                     logger.info("Generation in progress: Stop button is visible")
                     return True
 
-            # 2. Check if Send button is hidden (often replaced by Stop button)
-            # This is a secondary check, might be less reliable if UI changes
-            send_selectors = gemini_selectors.get_all_selectors("send_button")
-            primary_send = send_selectors[0]
-            if not await self.page.is_visible(primary_send):
-                logger.info("Generation in progress: Send button is not visible")
-                return True
+            # 2. Check for Mic button (only visible when idle and textarea empty)
+            mic_selectors = gemini_selectors.get_all_selectors("mic_button")
+            for selector in mic_selectors:
+                if await self.page.is_visible(selector):
+                    logger.info("Not generating: Mic button is visible")
+                    return False
 
-            return False
+            # 3. Check if Send button is visible
+            send_selectors = gemini_selectors.get_all_selectors("send_button")
+            for selector in send_selectors:
+                if await self.page.is_visible(selector):
+                    logger.info("Not generating: Send button is visible")
+                    return False
+
+            # 4. If neither Stop, Send, nor Mic is visible, it might be busy or in an unusual state
+            # but usually it's considered "generating" if Send/Mic are missing
+            logger.info("Neither Stop, Send, nor Mic visible - likely in progress or transitioning")
+            return True
         except Exception as e:
             logger.warning(f"Error checking generation status: {e}")
             return False
@@ -617,3 +643,206 @@ class GeminiPageActions:
                 self.page, "ensure_reasoning_mode", e
             )
             raise
+
+    async def take_screenshot(self, name: str = "manual_capture") -> str:
+        """
+        Captures a screenshot of the current page.
+        
+        :param name: Base name for the screenshot file
+        :return: Absolute path to the saved screenshot
+        """
+        logger.info(f"Capturing screenshot: {name}")
+        path = await self.screenshot_manager.capture_success(self.page, name)
+        if path:
+            return str(path.resolve())
+        raise Exception("Failed to capture screenshot")
+
+    async def check_session_status(self) -> dict:
+        """
+        Checks if the current session is valid and authenticated.
+        
+        :return: Dictionary with status information
+        """
+        logger.info("Checking session status...")
+        
+        status = {
+            "authenticated": False,
+            "page_loaded": False,
+            "url": self.page.url,
+            "details": ""
+        }
+        
+        try:
+            # Check if we are on a Google login page
+            if "accounts.google.com" in self.page.url:
+                status["details"] = "Session expired: redirected to login page"
+                return status
+            
+            # Check if prompt textarea is visible
+            textarea_selector = gemini_selectors.get_primary("prompt_textarea")
+            if await self.page.is_visible(textarea_selector):
+                status["authenticated"] = True
+                status["page_loaded"] = True
+                status["details"] = "Session active and textarea visible"
+            else:
+                # Check for "Se ha cerrado tu sesión" or similar
+                session_ended = await self.page.query_selector("h1.mat-mdc-dialog-title")
+                if session_ended:
+                    text = await session_ended.inner_text()
+                    if "sesión" in text.lower() or "signed out" in text.lower():
+                        status["details"] = f"Session ended dialog detected: {text}"
+                    else:
+                        status["details"] = "Textarea not visible, unknown state"
+                else:
+                    status["details"] = "Textarea not visible and no error dialog detected"
+                    
+            return status
+        except Exception as e:
+            logger.error(f"Error checking session status: {e}")
+            status["details"] = f"Error: {str(e)}"
+            return status
+
+    async def upload_file(self, file_path: str):
+        """
+        Uploads a file to the Gemini prompt.
+        
+        :param file_path: Path to the file to upload
+        """
+        logger.info(f"Uploading file: {file_path}")
+        
+        if not Path(file_path).exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+            
+        try:
+            # Try to find the file input
+            # Playwright's set_input_files works on hidden inputs as well
+            file_input_selectors = [
+                "input[type='file']",
+                "input[accept*='image']",
+                "input[accept*='pdf']"
+            ]
+            
+            success = False
+            for selector in file_input_selectors:
+                try:
+                    # Check if it exists
+                    await self.page.wait_for_selector(selector, timeout=5000)
+                    await self.page.set_input_files(selector, file_path)
+                    success = True
+                    logger.info(f"✓ File uploaded using selector: {selector}")
+                    break
+                except Exception:
+                    continue
+            
+            if not success:
+                # Try clicking the plus/attach button first if it exists
+                attach_selectors = [
+                    "button[aria-label*='Attach' i]",
+                    "button[aria-label*='Adjuntar' i]",
+                    "mat-icon[data-mat-icon-name='add_circle']",
+                    "mat-icon[data-mat-icon-name='add']"
+                ]
+                
+                for selector in attach_selectors:
+                    try:
+                        btn = await self.page.query_selector(selector)
+                        if btn and await btn.is_visible():
+                            await btn.click()
+                            await self.page.wait_for_timeout(1000)
+                            # Try input again after clicking
+                            await self.page.set_input_files("input[type='file']", file_path)
+                            success = True
+                            logger.info(f"✓ File uploaded after clicking attach button: {selector}")
+                            break
+                    except Exception:
+                        continue
+            
+            if not success:
+                raise Exception("Could not find file input for uploading.")
+                
+            # Wait for upload to process
+            await self.page.wait_for_timeout(3000)
+            
+        except Exception as e:
+            logger.error(f"Error uploading file: {e}")
+            await self.screenshot_manager.capture_error(self.page, "upload_file", e)
+            raise
+
+    async def list_chats(self) -> List[Dict[str, str]]:
+        """
+        Lists recent chats from the sidebar.
+        
+        :return: List of dictionaries with 'title' and 'url' (if available)
+        """
+        logger.info("Listing recent chats...")
+        
+        chats = []
+        history_selectors = [
+            "a[href*='/app/']",  # Gemini chat links usually have /app/ in URL
+            ".history-item",
+            "div[role='link']",
+            "li.conversation-list-item"
+        ]
+        
+        for selector in history_selectors:
+            try:
+                elements = await self.page.query_selector_all(selector)
+                for el in elements:
+                    text = await el.inner_text()
+                    href = await el.get_attribute("href")
+                    
+                    if text and len(text.strip()) > 1:
+                        # Clean up text (often has icons/newlines)
+                        clean_title = text.split('\n')[0].strip()
+                        if clean_title and clean_title not in [c["title"] for c in chats]:
+                            chats.append({
+                                "title": clean_title,
+                                "url": href if href else ""
+                            })
+                
+                if chats:
+                    break
+            except Exception:
+                continue
+                
+        return chats[:15]  # Limit to 15 recent chats
+
+    async def switch_chat(self, chat_title: str) -> bool:
+        """
+        Switches to a chat with the given title.
+        
+        :param chat_title: The title of the chat to switch to
+        :return: True if successful
+        """
+        logger.info(f"Switching to chat: {chat_title}")
+        
+        # Try finding the chat item in the sidebar
+        try:
+            # Use text selector for the chat title
+            chat_selector = f"text='{chat_title}'"
+            chat_item = await self.page.query_selector(chat_selector)
+            
+            if chat_item:
+                await chat_item.click()
+                await self.page.wait_for_load_state("domcontentloaded")
+                await self.page.wait_for_timeout(2000)
+                logger.info(f"✓ Switched to chat: {chat_title}")
+                return True
+            
+            # Try partial match if exact match fails
+            chat_selector = f"xpath=//div[contains(text(), '{chat_title}')] | //a[contains(text(), '{chat_title}')]"
+            chat_item = await self.page.query_selector(chat_selector)
+            if chat_item:
+                await chat_item.click()
+                await self.page.wait_for_load_state("domcontentloaded")
+                await self.page.wait_for_timeout(2000)
+                logger.info(f"✓ Switched to chat (partial match): {chat_title}")
+                return True
+                
+            logger.warning(f"Chat '{chat_title}' not found in the list.")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error switching chat: {e}")
+            await self.screenshot_manager.capture_error(self.page, "switch_chat", e)
+            return False

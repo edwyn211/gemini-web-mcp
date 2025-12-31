@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import argparse
 from pathlib import Path
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
@@ -86,6 +87,10 @@ async def main():
     """
     Launches a persistent browser context for Gemini.
     """
+    parser = argparse.ArgumentParser(description="Authenticate with Gemini and save state.")
+    parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
+    args = parser.parse_args()
+
     # Ensure profile directory exists
     USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
     
@@ -94,12 +99,21 @@ async def main():
     
     logging.info(f"Starting browser with profile at: {USER_DATA_DIR.absolute()}")
     
+    # Check for display environment
+    if not os.getenv("DISPLAY") and not args.headless:
+        logging.warning("No X server or $DISPLAY detected. If not running headlessly, this will likely fail.")
+        logging.warning("Consider using 'xvfb-run -a python auth_setup.py' or adding the '--headless' flag.")
+
+    if args.headless:
+        logging.info("Running in HEADLESS mode. Manual interaction will not be possible.")
+        logging.info("Ensure GOOGLE_EMAIL and GOOGLE_PASSWORD are set in .env for auto-login.")
+    
     async with async_playwright() as p:
         # Launch persistent context
         # We use a persistent context so the session is stored in the directory
         context = await p.chromium.launch_persistent_context(
             user_data_dir=USER_DATA_DIR,
-            headless=False,
+            headless=args.headless,
             channel="chrome",  # Try to use system Chrome
             args=[
                 "--disable-blink-features=AutomationControlled",
@@ -157,8 +171,33 @@ async def main():
 
         # Wait indefinitely for the main chat element to verify login success
         try:
+            # Task to take periodic screenshots for remote debugging
+            async def periodic_screenshot():
+                os.makedirs("screenshots", exist_ok=True)
+                count = 0
+                while True:
+                    try:
+                        await page.screenshot(path=f"screenshots/auth_step_{count}.png")
+                        logging.info(f"Screenshot saved: screenshots/auth_step_{count}.png")
+                        count += 1
+                        # Rotate screenshots (keep last 5)
+                        if count > 5:
+                            oldest = f"screenshots/auth_step_{count-6}.png"
+                            if os.path.exists(oldest):
+                                os.remove(oldest)
+                    except Exception as e:
+                        logging.debug(f"Screenshot failed: {e}")
+                        break
+                    await asyncio.sleep(5)
+
+            screenshot_task = asyncio.create_task(periodic_screenshot())
+
             # We wait for 'rich-textarea' which is the main input box
             await page.wait_for_selector('rich-textarea', state="visible", timeout=0)
+            
+            # Stop the screenshot task
+            screenshot_task.cancel()
+            
             logging.info("\n✅ LOGIN SUCCESSFUL! The chat interface is visible.")
             
             # Export session to JSON for Docker compatibility
@@ -169,17 +208,33 @@ async def main():
             
         except Exception as e:
             # Should not happen with timeout=0 unless browser is closed
+            # If we were taking screenshots, save the final state
+            screenshot_path = "screenshots/auth_last_error.png"
+            os.makedirs("screenshots", exist_ok=True)
+            try:
+                await page.screenshot(path=screenshot_path)
+                logging.error(f"Error during login. Last screen saved to {screenshot_path}")
+            except:
+                pass
             logging.warning(f"Browser closed or error before login confirmed: {e}")
 
         logging.info("----------------------------------------------------------------")
-        logging.info("YOU MAY NOW CLOSE THE BROWSER WINDOW TO EXIT.")
+        if not args.headless:
+            logging.info("YOU MAY NOW CLOSE THE BROWSER WINDOW TO EXIT.")
+        else:
+            logging.info("HEADLESS MODE: Process will exit automatically once login is detected.")
+            logging.info("If it hangs, check if 2FA is required.")
         logging.info("----------------------------------------------------------------")
         
-        # Wait for the user to close the page/browser
-        # Wait for the user to close the page/browser
+        # Wait for the user to close the page/browser or for periodic checks if headless
         try:
             # Loop until the page is closed
             while context.pages:
+                if args.headless:
+                    # If headless and we reached here, it means we found 'rich-textarea'
+                    # and exported the state. We can probably exit.
+                    logging.info("Login confirmed and state exported. Exiting...")
+                    break
                 await asyncio.sleep(1)
         except Exception as e:
             logging.debug(f"Loop check exited (browser closed?): {e}")

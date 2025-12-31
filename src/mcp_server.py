@@ -138,6 +138,46 @@ class StatusResponse(BaseModel):
     message: str | None = Field(None, description="Detailed status message.")
 
 
+class ScreenshotResponse(BaseModel):
+    """Response model for screenshot capture."""
+
+    status: str = Field(..., description="Overall status of the operation")
+    screenshot_path: str | None = Field(None, description="Absolute path to the saved screenshot")
+    message: str | None = Field(None, description="Detailed message or error info")
+
+
+class SessionStatusResponse(BaseModel):
+    """Response model for session status check."""
+
+    status: str = Field(..., description="Overall status ('success' or 'error')")
+    authenticated: bool = Field(False, description="Whether the user is currently logged in")
+    page_loaded: bool = Field(False, description="Whether the Gemini page is loaded and interactive")
+    url: str = Field(..., description="Current browser URL")
+    details: str | None = Field(None, description="Additional details about the session state")
+
+
+class ChatItem(BaseModel):
+    """Represents a single chat in the history."""
+
+    title: str = Field(..., description="The title of the chat")
+    url: str | None = Field(None, description="The URL of the chat session")
+
+
+class ChatListResponse(BaseModel):
+    """Response model for listing chats."""
+
+    status: str = Field(..., description="Overall status of the operation")
+    chats: List[ChatItem] = Field(default_factory=list, description="List of recent chats")
+    message: str | None = Field(None, description="Detailed message or error info")
+
+
+class GenericResponse(BaseModel):
+    """Generic response model for simple operations."""
+
+    status: str = Field(..., description="Overall status ('success' or 'error')")
+    message: str | None = Field(None, description="Detailed message or error info")
+
+
 async def setup_browser_context(p) -> tuple[BrowserContext, Page]:
     """Sets up the Playwright browser context and page"""
     if not AUTH_STATE_PATH.exists():
@@ -525,6 +565,156 @@ async def get_gemini_task_status(
         StatusResponse containing the status, current generation state, and results (potentially truncated).
     """
     return await execute_get_gemini_task_status(request_id, offset, max_chars)
+
+
+@mcp.tool()
+async def take_gemini_screenshot(name: str = "manual_capture") -> ScreenshotResponse:
+    """
+    Capture a screenshot of the current Gemini session.
+
+    Use this tool when you need visual confirmation of the current UI state,
+    especially if you suspect something is wrong or if you want to see a generated
+    image, chart, or the Reasoning block.
+
+    Args:
+        name: A descriptive name for the screenshot (e.g., 'research_plan_ready')
+
+    Returns:
+        ScreenshotResponse containing the status and the absolute path to the image.
+    """
+    global gemini_actions, gemini_page
+    
+    if not gemini_actions:
+        return ScreenshotResponse(status="error", message="Browser not initialized. Start a task first.")
+    
+    try:
+        path = await gemini_actions.take_screenshot(name)
+        return ScreenshotResponse(status="success", screenshot_path=path, message="Screenshot captured successfully.")
+    except Exception as e:
+        logging.error(f"Error capturing screenshot: {e}")
+        return ScreenshotResponse(status="error", message=str(e))
+
+
+@mcp.tool()
+async def get_gemini_session_status() -> SessionStatusResponse:
+    """
+    Check if the current browser session is still active and authenticated.
+
+    Use this tool to verify if Gemini is ready to receive prompts or if the session
+    has expired (requiring an update to auth_state.json).
+
+    Returns:
+        SessionStatusResponse with authentication and page load status.
+    """
+    global gemini_actions
+    
+    if not gemini_actions:
+        return SessionStatusResponse(
+            status="error", 
+            authenticated=False, 
+            page_loaded=False, 
+            url="N/A", 
+            details="Browser not initialized."
+        )
+    
+    try:
+        status_info = await gemini_actions.check_session_status()
+        return SessionStatusResponse(
+            status="success",
+            authenticated=status_info["authenticated"],
+            page_loaded=status_info["page_loaded"],
+            url=status_info["url"],
+            details=status_info["details"]
+        )
+    except Exception as e:
+        logging.error(f"Error checking session status: {e}")
+        return SessionStatusResponse(
+            status="error",
+            authenticated=False,
+            page_loaded=False,
+            url="Error",
+            details=str(e)
+        )
+
+
+@mcp.tool()
+async def upload_file_to_gemini(file_path: str) -> GenericResponse:
+    """
+    Upload a local file to the current Gemini session.
+
+    Use this tool to provide documents, images, or data files for Gemini to analyze.
+    After uploading, you can use `execute_gemini_tasks` to ask questions about the file.
+
+    Args:
+        file_path: Absolute path to the file to upload.
+
+    Returns:
+        GenericResponse indicating success or failure.
+    """
+    global gemini_actions
+    
+    if not gemini_actions:
+        return GenericResponse(status="error", message="Browser not initialized. Start a task first.")
+    
+    try:
+        await gemini_actions.upload_file(file_path)
+        return GenericResponse(status="success", message=f"File '{os.path.basename(file_path)}' uploaded successfully.")
+    except Exception as e:
+        logging.error(f"Error uploading file: {e}")
+        return GenericResponse(status="error", message=str(e))
+
+
+@mcp.tool()
+async def list_gemini_chats() -> ChatListResponse:
+    """
+    List recent chat titles from the Gemini history sidebar.
+
+    Use this tool to see available persistent conversations that you can switch to.
+
+    Returns:
+        ChatListResponse containing a list of chat titles and URLs.
+    """
+    global gemini_actions
+    
+    if not gemini_actions:
+        return ChatListResponse(status="error", message="Browser not initialized. Start a task first.")
+    
+    try:
+        chats_data = await gemini_actions.list_chats()
+        chats = [ChatItem(title=c["title"], url=c.get("url")) for c in chats_data]
+        return ChatListResponse(status="success", chats=chats)
+    except Exception as e:
+        logging.error(f"Error listing chats: {e}")
+        return ChatListResponse(status="error", message=str(e))
+
+
+@mcp.tool()
+async def switch_gemini_chat(chat_title: str) -> GenericResponse:
+    """
+    Switch the browser context to an existing chat from the history.
+
+    Use this tool to continue a specific conversation by its title.
+
+    Args:
+        chat_title: The exact or partial title of the chat to switch to.
+
+    Returns:
+        GenericResponse indicating if the switch was successful.
+    """
+    global gemini_actions
+    
+    if not gemini_actions:
+        return GenericResponse(status="error", message="Browser not initialized. Start a task first.")
+    
+    try:
+        success = await gemini_actions.switch_chat(chat_title)
+        if success:
+            return GenericResponse(status="success", message=f"Switched to chat: {chat_title}")
+        else:
+            return GenericResponse(status="error", message=f"Chat '{chat_title}' not found.")
+    except Exception as e:
+        logging.error(f"Error switching chat: {e}")
+        return GenericResponse(status="error", message=str(e))
 
 
 async def execute_get_gemini_task_status(

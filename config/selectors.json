@@ -109,6 +109,17 @@
       "button:has-text('Confirmar')"
     ]
   },
+  "mic_button": {
+    "primary": "mat-icon[data-mat-icon-name='mic']",
+    "fallbacks": [
+      "role=button[name*='mic' i]",
+      "role=button[name*='micro' i]",
+      "role=button[name*='dictar' i]",
+      "[aria-label*='mic' i]",
+      "[aria-label*='micro' i]",
+      "mat-icon[data-mat-icon-name='google_mic']"
+    ]
+  },
   "send_button": {
     "primary": "mat-icon[data-mat-icon-name='send']",
     "fallbacks": [

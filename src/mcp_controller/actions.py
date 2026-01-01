@@ -673,29 +673,45 @@ class GeminiPageActions:
         }
         
         try:
-            # Check if we are on a Google login page
-            if "accounts.google.com" in self.page.url:
-                status["details"] = "Session expired: redirected to login page"
-                return status
+            # Check for specific elements similar to diagnostic script
+            # 1. Check for prompt textarea (definitive test for "can I chat?")
+            textarea = await self.page.query_selector("div[contenteditable='true']") or \
+                       await self.page.query_selector("rich-textarea")
             
-            # Check if prompt textarea is visible
-            textarea_selector = gemini_selectors.get_primary("prompt_textarea")
-            if await self.page.is_visible(textarea_selector):
+            if textarea and await textarea.is_visible():
                 status["authenticated"] = True
                 status["page_loaded"] = True
-                status["details"] = "Session active and textarea visible"
+                status["details"] = "Session active: Prompt input area visible."
             else:
-                # Check for "Se ha cerrado tu sesión" or similar
+                 # Check for "Se ha cerrado tu sesión" or similar
                 session_ended = await self.page.query_selector("h1.mat-mdc-dialog-title")
                 if session_ended:
                     text = await session_ended.inner_text()
-                    if "sesión" in text.lower() or "signed out" in text.lower():
-                        status["details"] = f"Session ended dialog detected: {text}"
-                    else:
-                        status["details"] = "Textarea not visible, unknown state"
+                    status["details"] = f"Session ended dialog detected: {text}"
                 else:
-                    status["details"] = "Textarea not visible and no error dialog detected"
-                    
+                    status["details"] = "Textarea not visible. "
+
+            # 2. Check for User Avatar (Account Verification)
+            if status["authenticated"]:
+                account_btn = await self.page.query_selector("div[aria-label*='cuenta' i]") or \
+                              await self.page.query_selector("div[aria-label*='Google Account' i]") or \
+                              await self.page.query_selector("img[src*='googleusercontent.com']") or \
+                              await self.page.query_selector("a[href*='accounts.google.com']")
+                
+                if account_btn:
+                     status["details"] += " Account verified (Avatar found)."
+                else:
+                     status["details"] += " WARNING: Account avatar not found (but chat is visible)."
+
+            # 3. Check for specific URL pattern
+            if "/app" in self.page.url:
+                 # Standard Gemini App URL
+                 pass
+            elif "accounts.google.com" in self.page.url:
+                 status["authenticated"] = False
+                 status["page_loaded"] = False
+                 status["details"] = "Redirected to login page."
+
             return status
         except Exception as e:
             logger.error(f"Error checking session status: {e}")

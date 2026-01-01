@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from typing import Dict, List
@@ -32,6 +33,7 @@ class GeminiPageActions:
         self.page = page
         self.validator = StateValidator(page, gemini_selectors)
         self.screenshot_manager = ScreenshotManager()
+        self.execution_lock = asyncio.Lock()
 
     async def _try_selectors(
         self, selector_field: str, action: str = "click", timeout: int = 10000, **kwargs

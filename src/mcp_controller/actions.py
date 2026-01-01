@@ -123,7 +123,7 @@ class GeminiPageActions:
 
         :param text: The prompt text to send.
         """
-        logger.info(f"Sending prompt: '{text}'")
+        logger.info(f"👤 SENDING PROMPT: '{text}'")
 
         try:
             # Wait for the textarea to be available
@@ -381,7 +381,7 @@ class GeminiPageActions:
                             "Mostrar borradores", ""
                         ).strip()
 
-                    logger.info(f"Retrieved response: '{valid_response[:100]}...'")
+                    logger.info(f"🤖 GEMINI RESPONSE:\n{valid_response}")
                     break
 
             if valid_response:

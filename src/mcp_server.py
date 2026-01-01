@@ -436,6 +436,7 @@ async def execute_tasks_workflow(
                     metadata={"tool": tool, "skipped_prompt": skipped_prompt},
                 )
             )
+            logging.info(f"✅ TASK COMPLETED: {task.description}\nRESULT:\n{response_text}")
 
             current_state["tasks"][task_index] = task
             current_state["current_task_index"] += 1

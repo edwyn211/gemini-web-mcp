@@ -232,7 +232,10 @@ async def setup_browser_context(p) -> tuple[BrowserContext, Page]:
 
 
 async def execute_tasks_workflow(
-    task_descriptions: List[str], tool: str | None = None, new_chat: bool = True
+    task_descriptions: List[str],
+    tool: str | None = None,
+    new_chat: bool = True,
+    request_id: str | None = None,
 ) -> TaskResponse:
     """Execute a list of tasks using the Gemini agent workflow"""
     global gemini_actions, browser_context, gemini_page, screenshot_manager
@@ -249,7 +252,8 @@ async def execute_tasks_workflow(
     # Create tasks from descriptions
     tasks = [Task(description=desc, completed=False) for desc in task_descriptions]
 
-    request_id = str(uuid.uuid4())
+    if not request_id:
+        request_id = str(uuid.uuid4())
     initial_state: AgentState = {"tasks": tasks, "current_task_index": 0}
 
     # Initial save to Redis with 'processing' status
@@ -525,11 +529,41 @@ async def execute_gemini_tasks(
 
     Returns:
         TaskResponse object containing:
-        - status: Overall success status
-        - results: List of individual task results including the text response from Gemini.
+        - status: "processing" (calls are now asynchronous)
+        - request_id: The ID to poll for results with get_gemini_task_status
     """
     try:
-        return await execute_tasks_workflow(tasks, tool, new_chat)
+        # Generate ID and save initial state
+        request_id = str(uuid.uuid4())
+
+        initial_response = TaskResponse(
+            status="processing",
+            message="Task started in background",
+            tasks_completed=0,
+            total_tasks=len(tasks),
+            results=[],
+            request_id=request_id,
+        )
+
+        # Save to Redis immediately so polling works
+        try:
+            r = await get_redis()
+            await r.setex(
+                f"gemini:response:{request_id}",
+                86400,
+                initial_response.model_dump_json(),
+            )
+        except Exception as e:
+            logging.error(f"Failed to set initial Redis state: {e}")
+            # We continue even if Redis fails, though polling might be flaky
+
+        # Launch background task
+        asyncio.create_task(
+            execute_tasks_workflow(tasks, tool, new_chat, request_id=request_id)
+        )
+
+        return initial_response
+
     except Exception as e:
         logging.exception("An error occurred in execute_gemini_tasks")
         return TaskResponse(

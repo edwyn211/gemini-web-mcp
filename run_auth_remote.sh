@@ -35,9 +35,13 @@ if ! command -v python &> /dev/null; then
     fi
 fi
 
+# Ensure screenshots directory exists and has permissions
+mkdir -p screenshots_host_access
+chmod 777 screenshots_host_access 2>/dev/null || true
+
 echo -e "${GREEN}Launching browser in a virtual frame buffer...${NC}"
 echo -e "This will allow the script to RUN as if it had a display."
-echo -e "The script will take screenshots every 5 seconds in the ${YELLOW}screenshots/${NC} directory."
+echo -e "The script will take screenshots every 5 seconds in the ${YELLOW}screenshots_host_access/${NC} directory."
 echo -e "Check those images if you need to see what's happening or if 2FA is required."
 
 # Run the script using xvfb-run

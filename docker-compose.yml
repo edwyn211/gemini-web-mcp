@@ -5,8 +5,9 @@ services:
     ports:
       - 0.0.0.0:8000:8000
     volumes:
+      - .:/app
       - ./auth_state.json:/app/auth_state.json:ro
-      - ./screenshots:/app/screenshots
+      - screenshots_data:/app/screenshots
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
@@ -23,3 +24,9 @@ services:
 
 volumes:
   redis_data:
+  screenshots_data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /home/user/Documentos/Github/gemini-web-mcp/screenshots_host_access

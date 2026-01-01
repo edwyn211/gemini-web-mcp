@@ -173,16 +173,17 @@ async def main():
         try:
             # Task to take periodic screenshots for remote debugging
             async def periodic_screenshot():
-                os.makedirs("screenshots", exist_ok=True)
+                screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"
+                os.makedirs(screenshot_dir, exist_ok=True)
                 count = 0
                 while True:
                     try:
-                        await page.screenshot(path=f"screenshots/auth_step_{count}.png")
-                        logging.info(f"Screenshot saved: screenshots/auth_step_{count}.png")
+                        await page.screenshot(path=f"{screenshot_dir}/auth_step_{count}.png")
+                        logging.info(f"Screenshot saved: {screenshot_dir}/auth_step_{count}.png")
                         count += 1
                         # Rotate screenshots (keep last 5)
                         if count > 5:
-                            oldest = f"screenshots/auth_step_{count-6}.png"
+                            oldest = f"{screenshot_dir}/auth_step_{count-6}.png"
                             if os.path.exists(oldest):
                                 os.remove(oldest)
                     except Exception as e:
@@ -194,6 +195,17 @@ async def main():
 
             # We wait for 'rich-textarea' which is the main input box
             await page.wait_for_selector('rich-textarea', state="visible", timeout=0)
+
+            # Wait a bit for UI to settle (user request: wait long enough to take screenshot)
+            await page.wait_for_timeout(3000)
+
+            # Take a final success screenshot
+            screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"
+            try:
+                await page.screenshot(path=f"{screenshot_dir}/auth_success.png")
+                logging.info(f"Success screenshot saved: {screenshot_dir}/auth_success.png")
+            except Exception as e:
+                logging.warning(f"Failed to take success screenshot: {e}")
             
             # Stop the screenshot task
             screenshot_task.cancel()

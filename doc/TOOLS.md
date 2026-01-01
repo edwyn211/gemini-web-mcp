@@ -5,21 +5,22 @@ Este documento proporciona una guía detallada sobre todas las herramientas expu
 ## 🛠️ Herramientas de Ejecución y Monitoreo
 
 ### `execute_gemini_tasks`
-La herramienta principal para interactuar con Gemini. Soporta múltiples tareas secuenciales y el uso de herramientas específicas de Gemini.
-
+La herramienta principal para interactuar con Gemini. Debido a la naturaleza de larga duración de algunas tareas, esta herramienta es **asíncrona**:
+- **Comportamiento**: Retorna inmediatamente un `request_id` y un estado `processing`.
 - **Argumentos**:
   - `tasks` (`List[str]`): Lista de descripciones de tareas.
   - `tool` (`Optional[str]`): Herramienta a usar (`canvas`, `deep_research` o `null`).
   - `new_chat` (`bool`): Si se debe iniciar una conversación nueva (por defecto `true`).
-- **Uso**: Ideal para consultas de investigación, redacción de contenido o análisis complejo.
+- **Uso**: El cliente debe guardar el `request_id` para consultar el progreso.
 
 ### `get_gemini_task_status`
-Permite recuperar el estado o los resultados de una tarea iniciada previamente (especialmente útil para `deep_research`).
-
+Fundamental para recuperar el estado o los resultados de una tarea iniciada.
+- **Polling**: Se recomienda consultar esta herramienta cada pocos segundos hasta que el estado sea `success` o `error`.
 - **Argumentos**:
   - `request_id` (`str`): El ID devuelto al iniciar la tarea.
-  - `offset` (`int`): Índice de carácter para empezar a leer (para respuestas grandes).
+  - `offset` (`int`): Índice de carácter para empezar a leer.
   - `max_chars` (`int`): Número máximo de caracteres a devolver.
+- **Recuperación Inteligente**: El agente prioriza el contenido de herramientas especiales. Por ejemplo, si se usó `deep_research`, devolverá el informe final en lugar de los mensajes de chat intermedios.
 
 ---
 

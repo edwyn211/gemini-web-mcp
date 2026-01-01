@@ -131,7 +131,23 @@ curl -X POST http://localhost:8000/tasks \
   }'
 ```
 
+
 ---
+
+## 🏗️ Arquitectura y Flujo Asíncrono
+
+El agente está diseñado para manejar tareas de larga duración (como Deep Research de ~30min) sin bloquear al cliente MCP mediante un sistema de **Polling Asíncrono**:
+
+1.  **Ejecución**: Al llamar a `execute_gemini_tasks`, el servidor devuelve un `request_id` inmediato y procesa la tarea en segundo plano.
+2.  **Persistencia**: El estado y los resultados se guardan en **Redis**.
+3.  **Recuperación**: El cliente debe usar `get_gemini_task_status` periódicamente para obtener la respuesta final.
+
+Para más detalles, consulta:
+- [Arquitectura del Sistema](doc/ARCHITECTURE.md)
+- [Funcionamiento Asíncrono](doc/ASYNC_FLOW.md)
+
+---
+
 
 ## 🔧 Solución de Problemas
 

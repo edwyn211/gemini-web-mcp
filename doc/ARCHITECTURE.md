@@ -2,42 +2,43 @@
 
 El Gemini Web Agent está diseñado como un puente entre clientes MCP y la interfaz web de Gemini, utilizando una arquitectura desacoplada para mayor robustez y mantenibilidad.
 
-## 🏗️ Componentes Principales
+## 🏗️ Ciclo de Vida de una Tarea
+
+El sistema utiliza un modelo asíncrono basado en Redis para manejar tareas de larga duración (como Deep Research).
+
+```mermaid
+graph TD
+    Client[Cliente MCP] -->|execute_gemini_tasks| Server[Servidor MCP]
+    Server -->|1. Genera ID| Redis[(Redis)]
+    Server -->|2. Inicia Segundo Plano| Workflow[Workflow Engine]
+    Workflow -->|3. Adquiere Sesión| SM[Session Manager]
+    Workflow -->|4. Ejecuta Acciones| POM[Gemini Page Actions]
+    POM -->|5. Playwright| Browser[Navegador]
+    Browser -->|6. Resultado| POM
+    POM -->|7. Guarda Final| Redis
+    Client -.->|get_gemini_task_status| Redis
+```
+
+## 🧩 Componentes Principales
 
 ### 1. Servidor MCP (`src/mcp_server.py`)
 - **Responsabilidad**: Punto de entrada para comandos MCP y peticiones HTTP.
 - **Tecnología**: FastMCP (Starlette).
-- **Funcionalidad**: Define las herramientas disponibles, valida los esquemas de entrada/salida y gestiona el ciclo de vida del navegador.
+- **Asincronía**: Implementa una arquitectura de "produce-consume" donde las tareas se delegan a un hilo secundario inmediatamente, retornando un `request_id` para polling.
 
 ### 2. Controlador de Acciones (`src/mcp_controller/`)
-- **`actions.py`**: Implementa el patrón *Page Object Model* (POM). Contiene la lógica pura de interacción (hacer clic, escribir, validar estados) abstrayendo la complejidad de Playwright.
-- **`selectors.py`**: Gestiona la carga y uso de selectores CSS. Soporta un sistema de *fallbacks* (selectores alternativos) para mitigar cambios en la UI de Gemini.
+- **`actions.py`**: Implementa el patrón *Page Object Model* (POM). Contiene la lógica pura de interacción.
+- **Estrategia de Interacción**: Para prompts largos, el agente utiliza `evaluate` de JavaScript para insertar el texto directamente en el DOM, evitando la latencia y posibles timeouts del tecleo carácter por carácter.
+- **`selectors.py`**: Gestiona la carga y uso de selectores CSS con soporte de *fallbacks*.
 
 ### 3. Orquestador y Estado (`src/orchestrator/`)
-- **`graph.py`**: Implementa el motor de decisión usando **LangGraph**. Define un grafo de estados que permite:
-    - **Ciclos de Crítica**: Un nodo "critic" puede rechazar una respuesta si es demasiado corta o parece errónea, forzando un reintento.
-    - **Aprobación Humana**: Soporta pausar la ejecución en tareas sensibles (como Deep Research) para esperar una confirmación externa.
-- **`state.py`**: Define el esquema de datos que fluye entre los nodos del grafo, permitiendo persistir el contexto de la tarea actual.
+- **Workflow**: Aunque existe una implementación con **LangGraph** para lógicas complejas de crítica, el flujo actual se centra en una ejecución secuencial robusta que detecta automáticamente herramientas especiales (Canvas, Deep Research).
+- **Confirmación Automática**: El orquestador maneja la espera y confirmación de planes en Deep Research sin intervención del usuario.
 
-### 4. Capas de Utilidad (`src/utils/`)
-- **`screenshot_manager.py`**: Captura automática de evidencia visual en fallos o éxitos.
-- **`state_validator.py`**: Verifica que la UI esté en el estado esperado después de una acción (ej. "¿se envió realmente el prompt?").
-- **`retry_handler.py`**: Lógica de reintentos exponenciales para acciones propensas a fallos de red o de carga.
+## 💾 Persistencia y Estado
+- **Redis**: Actúa como la fuente de verdad para el estado de las tareas. Almacena objetos `TaskResponse` con estados: `processing`, `success`, `error`.
+- **Perfiles de Navegador**: Ubicados en `profiles/default`, mantienen el estado de autenticación y cookies para evitar logins manuales recurrentes.
 
-## 🔄 Flujo de Datos y Orquestación
-
-```mermaid
-graph TD
-    A[Inicio] --> B{execute_task}
-    B --> C[Interactuar con Gemini]
-    C --> D{Requiere Aprobación?}
-    D -- Sí --> E[human_approval_node]
-    D -- No --> F[critic_node]
-    E --> F
-    F --> G{Pasa Crítica?}
-    G -- No --> B
-    G -- Sí --> H[Siguiente Tarea / Fin]
-```
 
 ## 🔐 Gestión de Sesión
 El sistema utiliza perfiles persistentes de Chromium ubicados en `profiles/default`. Esto permite que las cookies de autenticación, la configuración de idioma y el estado local se mantengan entre reinicios del servidor, evitando bloqueos por inicios de sesión frecuentes.

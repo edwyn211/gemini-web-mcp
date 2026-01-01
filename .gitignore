@@ -9,7 +9,7 @@ venv/
 .venv/
 
 # Docker
-#auth_state.json
+auth_state.json
 profiles/
 .env
 

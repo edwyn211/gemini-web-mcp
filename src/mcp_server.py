@@ -602,6 +602,79 @@ async def get_gemini_task_status(
 
 
 @mcp.tool()
+async def refresh_gemini_auth() -> GenericResponse:
+    """
+    Refreshes the Gemini session authentication by running the remote auth script.
+
+    Use this tool when:
+    1. The session has expired or is invalid.
+    2. You receive authentication errors.
+    3. `get_gemini_session_status` returns authenticated=False.
+
+    This runs `./run_auth_remote.sh` which launches a browser in a virtual display
+    to restore the session using the stored credentials and device trust.
+
+    Returns:
+        GenericResponse indicating success or failure.
+    """
+    logging.info("♻️ Refreshing Gemini authentication...")
+    
+    script_path = Path("./run_auth_remote.sh").resolve()
+    if not script_path.exists():
+        return GenericResponse(
+            status="error", 
+            message=f"Auth script not found at {script_path}"
+        )
+
+    try:
+        # Run the script asynchronously
+        process = await asyncio.create_subprocess_exec(
+            str(script_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            cwd=str(script_path.parent)
+        )
+
+        stdout, stderr = await process.communicate()
+        
+        stdout_str = stdout.decode().strip()
+        stderr_str = stderr.decode().strip()
+
+        if process.returncode == 0:
+            logging.info("✅ Auth refresh successful.")
+            
+            # Reload the browser context if it exists to pick up new auth state
+            global gemini_actions, browser_context, gemini_page
+            if gemini_actions:
+                 # Close existing context to force reload on next request
+                 # We don't want to re-initialize everything here to avoid complexity,
+                 # just clearing it ensuring next request reloads it.
+                 try:
+                     await gemini_actions.page.context.close()
+                 except Exception:
+                     pass
+                 gemini_actions = None
+                 browser_context = None
+                 gemini_page = None
+                 logging.info("Cleared existing browser session to force reload on next request.")
+
+            return GenericResponse(
+                status="success", 
+                message=f"Authentication refreshed successfully.\nLogs:\n{stdout_str}"
+            )
+        else:
+            logging.error(f"❌ Auth refresh failed: {stderr_str}")
+            return GenericResponse(
+                status="error", 
+                message=f"Authentication refresh failed (Code {process.returncode}).\nError:\n{stderr_str}\n\nOutput:\n{stdout_str}\n\nIf this persists, please perform manual authentication."
+            )
+
+    except Exception as e:
+        logging.exception("Error running auth refresh script")
+        return GenericResponse(status="error", message=str(e))
+
+
+@mcp.tool()
 async def take_gemini_screenshot(name: str = "manual_capture") -> ScreenshotResponse:
     """
     Capture a screenshot of the current Gemini session.

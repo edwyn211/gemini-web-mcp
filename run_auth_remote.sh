@@ -36,23 +36,54 @@ if ! command -v python &> /dev/null; then
 fi
 
 # Ensure screenshots directory exists and has permissions
+# Remove existing directory to avoid permission issues (e.g. owned by another user)
+if [ -d "screenshots_host_access" ]; then
+    rm -rf screenshots_host_access || echo "Warning: Could not remove screenshots_host_access"
+fi
 mkdir -p screenshots_host_access
 chmod 777 screenshots_host_access 2>/dev/null || true
 
 echo -e "${GREEN}Launching browser in a virtual frame buffer...${NC}"
 echo -e "This will allow the script to RUN as if it had a display."
-echo -e "The script will take screenshots every 5 seconds in the ${YELLOW}screenshots_host_access/${NC} directory."
-echo -e "Check those images if you need to see what's happening or if 2FA is required."
+echo -e "The script will take a screenshot ${GREEN}ONLY upon success or failure${NC}."
+echo -e "Check ${YELLOW}screenshots_host_access/auth_success_*.png${NC} when done."
 
-# Run the script using xvfb-run
-# -a: auto-servernum (find a free server number)
-# -s: server-args (virtual display 1920x1080x24)
-xvfb-run -a -s "-screen 0 1920x1080x24" $PYTHON_CMD auth_setup.py "$@"
+# Configuration (defaults can be overridden by env vars)
+MAX_RETRIES=${AUTH_MAX_RETRIES:-3}
+RETRY_DELAY=${AUTH_RETRY_DELAY_SECONDS:-60}
 
-EXIT_CODE=$?
+ATTEMPT=1
+EXIT_CODE=0
 
-if [ $EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}Success! Authentication state should be saved.${NC}"
+while [ $ATTEMPT -le $MAX_RETRIES ]; do
+    echo -e "${YELLOW}Attempt $ATTEMPT of $MAX_RETRIES...${NC}"
+    
+    # Run the script using xvfb-run
+    # -a: auto-servernum (find a free server number)
+    # -s: server-args (virtual display 1920x1080x24)
+    xvfb-run -a -s "-screen 0 1920x1080x24" $PYTHON_CMD auth_setup.py "$@"
+    
+    EXIT_CODE=$?
+    
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo -e "${GREEN}Success! Authentication state should be saved.${NC}"
+        break
+    else
+        echo -e "${RED}Error: Authentication setup failed with exit code $EXIT_CODE.${NC}"
+        
+        if [ $ATTEMPT -lt $MAX_RETRIES ]; then
+            echo -e "${YELLOW}Retrying in $RETRY_DELAY seconds...${NC}"
+            sleep $RETRY_DELAY
+        fi
+    fi
+    
+    ATTEMPT=$((ATTEMPT + 1))
+done
+
+if [ $EXIT_CODE -ne 0 ]; then
+    echo -e "${RED}Critical: All $MAX_RETRIES attempts failed.${NC}"
+    exit $EXIT_CODE
 else
-    echo -e "${RED}Error: Authentication setup failed with exit code $EXIT_CODE.${NC}"
+    # Explicitly ensure success exit code
+    exit 0
 fi

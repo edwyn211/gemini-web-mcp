@@ -8,8 +8,19 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 from dotenv import load_dotenv
 
+from datetime import datetime
+
 # Load environment variables
 load_dotenv()
+
+def get_formatted_timestamp():
+    """Generates a timestamp in the format: 4_de_enero_del_2026_18:34_hrs"""
+    months = {
+        1: "enero", 2: "febrero", 3: "marzo", 4: "abril", 5: "mayo", 6: "junio",
+        7: "julio", 8: "agosto", 9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
+    }
+    now = datetime.now()
+    return f"{now.day}_de_{months[now.month]}_del_{now.year}_{now.strftime('%H:%M')}_hrs"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -155,6 +166,9 @@ async def main():
         """)
 
         logging.info("Navigating to Gemini...")
+        
+        # Periodic screenshot task removed as per user request.
+
         try:
             await page.goto("https://gemini.google.com/", timeout=60000)
         except Exception as e:
@@ -171,58 +185,51 @@ async def main():
 
         # Wait indefinitely for the main chat element to verify login success
         try:
-            # Task to take periodic screenshots for remote debugging
-            async def periodic_screenshot():
-                screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"
-                os.makedirs(screenshot_dir, exist_ok=True)
-                count = 0
-                while True:
-                    try:
-                        await page.screenshot(path=f"{screenshot_dir}/auth_step_{count}.png")
-                        logging.info(f"Screenshot saved: {screenshot_dir}/auth_step_{count}.png")
-                        count += 1
-                        # Rotate screenshots (keep last 5)
-                        if count > 5:
-                            oldest = f"{screenshot_dir}/auth_step_{count-6}.png"
-                            if os.path.exists(oldest):
-                                os.remove(oldest)
-                    except Exception as e:
-                        logging.debug(f"Screenshot failed: {e}")
-                        break
-                    await asyncio.sleep(5)
-
-            screenshot_task = asyncio.create_task(periodic_screenshot())
-
             # We wait for 'rich-textarea' which is the main input box
-            await page.wait_for_selector('rich-textarea', state="visible", timeout=0)
+            # Added timeout of 180 seconds (3 minutes) as requested
+            try:
+                logging.info("Waiting for main chat interface (timeout: 180s)...")
+                await page.wait_for_selector('rich-textarea', state="visible", timeout=180000)
+            except Exception as e:
+                logging.error("Timeout waiting for chat interface! Login might have failed or 2FA took too long.")
+                screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"
+                ts = get_formatted_timestamp()
+                path = f"{screenshot_dir}/auth_timeout_{ts}.png"
+                await page.screenshot(path=path)
+                logging.error(f"Timeout screenshot saved: {path}")
+                raise e
 
-            # Wait a bit for UI to settle (user request: wait long enough to take screenshot)
+            # Wait a bit for UI to settle 
             await page.wait_for_timeout(3000)
 
             # Take a final success screenshot
             screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"
             try:
-                await page.screenshot(path=f"{screenshot_dir}/auth_success.png")
-                logging.info(f"Success screenshot saved: {screenshot_dir}/auth_success.png")
+                ts = get_formatted_timestamp()
+                path = f"{screenshot_dir}/auth_success_{ts}.png"
+                await page.screenshot(path=path)
+                logging.info(f"Success screenshot saved: {path}")
             except Exception as e:
                 logging.warning(f"Failed to take success screenshot: {e}")
             
-            # Stop the screenshot task
-            screenshot_task.cancel()
+            # Stop the screenshot task - removed
+            # screenshot_task.cancel()
             
             logging.info("\n✅ LOGIN SUCCESSFUL! The chat interface is visible.")
             
-            # Export session to JSON for Docker compatibility
-            # (Windows User Data Dir is not compatible with Linux)
-            logging.info("Exporting session to 'auth_state.json' for Docker...")
+            # Export session to JSON
+            logging.info("Exporting session to 'auth_state.json' ...")
             await context.storage_state(path="auth_state.json")
             logging.info("Session exported successfully.")
             
         except Exception as e:
-            # Should not happen with timeout=0 unless browser is closed
             # If we were taking screenshots, save the final state
-            screenshot_path = "screenshots/auth_last_error.png"
-            os.makedirs("screenshots", exist_ok=True)
+            ts = get_formatted_timestamp()
+            screenshot_path = f"screenshots_host_access/auth_last_error_{ts}.png"
+            if not os.path.exists("screenshots_host_access"):
+                screenshot_path = f"screenshots/auth_last_error_{ts}.png"
+                os.makedirs("screenshots", exist_ok=True)
+                
             try:
                 await page.screenshot(path=screenshot_path)
                 logging.error(f"Error during login. Last screen saved to {screenshot_path}")
@@ -231,31 +238,14 @@ async def main():
             logging.warning(f"Browser closed or error before login confirmed: {e}")
 
         logging.info("----------------------------------------------------------------")
-        if not args.headless:
-            logging.info("YOU MAY NOW CLOSE THE BROWSER WINDOW TO EXIT.")
-        else:
-            logging.info("HEADLESS MODE: Process will exit automatically once login is detected.")
-            logging.info("If it hangs, check if 2FA is required.")
+        logging.info("Closing browser and exiting...")
         logging.info("----------------------------------------------------------------")
         
-        # Wait for the user to close the page/browser or for periodic checks if headless
-        try:
-            # Loop until the page is closed
-            while context.pages:
-                if args.headless:
-                    # If headless and we reached here, it means we found 'rich-textarea'
-                    # and exported the state. We can probably exit.
-                    logging.info("Login confirmed and state exported. Exiting...")
-                    break
-                await asyncio.sleep(1)
-        except Exception as e:
-            logging.debug(f"Loop check exited (browser closed?): {e}")
-
-        logging.info("Browser closed. Profile updated.")
+        # Always close after attempt (Success or Error caught above)
         try:
             await context.close()
         except Exception as e:
-            logging.debug(f"Error checking/closing context: {e}")
+            logging.debug(f"Error closing context: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -12,7 +12,15 @@ RUN groupadd -r mcpuser && useradd -r -g mcpuser -m mcpuser
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/mcpuser/.cache/ms-playwright
 
 # Copy the requirements file and install dependencies, including Playwright browsers
+# Copy the requirements file and install dependencies, including Playwright browsers
 COPY --chown=mcpuser:mcpuser requirements.txt .
+
+# Install system dependencies (xvfb for headed-like execution)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    xvfb \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir -r requirements.txt && \
     playwright install --with-deps chromium
 

@@ -459,7 +459,7 @@ class GeminiPageActions:
             # Since we need to click the icon's parent, we find the element first
             tools_icon = await self._try_selectors("tools_button", action="get_element")
             if tools_icon:
-                await tools_icon.locator("..").click(force=True)
+                await tools_icon.evaluate("el => el.parentElement.click()")
             else:
                 # Fallback to direct click if get_element failed but _try_selectors wait passed
                 # (though this branch is unlikely given _try_selectors logic)
@@ -476,7 +476,7 @@ class GeminiPageActions:
             # Click the parent button of the tool icon
             tool_icon = await self._try_selectors(tool_field, action="get_element")
             if tool_icon:
-                await tool_icon.locator("..").click(force=True)
+                await tool_icon.evaluate("el => el.parentElement.click()")
             else:
                 await self._try_selectors(tool_field, action="click", force=True)
 

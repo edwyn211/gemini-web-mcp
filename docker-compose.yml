@@ -6,11 +6,13 @@ services:
       - 0.0.0.0:8000:8000
     volumes:
       - .:/app
-      - ./auth_state.json:/app/auth_state.json:ro
+      - ./auth_state.json:/app/auth_state.json
       - screenshots_data:/app/screenshots
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
+      - AUTH_MAX_RETRIES=3
+      - AUTH_RETRY_DELAY_SECONDS=60
     depends_on:
       - redis
 

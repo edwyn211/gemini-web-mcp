@@ -182,12 +182,42 @@ async def execute_tasks_workflow(
     global session_manager, active_task_sessions
 
     # Acquire session
+    # Acquire initial session
     if new_chat:
-        # Use a worker session for parallelizable tasks
         gemini_actions = await session_manager.get_worker_session()
     else:
-        # Use main session for stateful continuations
         gemini_actions = await session_manager.get_main_session()
+
+    # AUTO-AUTH CHECK
+    try:
+        logging.info("Checking session authentication status...")
+        auth_status = await gemini_actions.check_session_status()
+        if not auth_status.get("authenticated", False):
+            logging.warning("⚠️ Session unauthenticated or expired. Initiating auto-refresh...")
+            
+            # Release the stale session before refreshing (prevents leaks)
+            if new_chat:
+                await session_manager.release_session(gemini_actions)
+            
+            # Run the auth refresh tool
+            refresh_result = await refresh_gemini_auth()
+            
+            if refresh_result.status == "success":
+                logging.info("✅ Auto-refresh successful. Re-acquiring session...")
+                # Re-acquire session from fresh context
+                if new_chat:
+                    gemini_actions = await session_manager.get_worker_session()
+                else:
+                    gemini_actions = await session_manager.get_main_session()
+            else:
+                logging.error(f"❌ Auto-refresh failed: {refresh_result.message}")
+                # We will try to proceed, but it will likely fail.
+                # Ideally, we should error out here, but for robustness we let the try/catch below handle it
+                pass
+    except Exception as e:
+        logging.error(f"Error during auto-auth check: {e}")
+        # Proceeding despite error
+
 
     screenshot_manager = gemini_actions.screenshot_manager
 

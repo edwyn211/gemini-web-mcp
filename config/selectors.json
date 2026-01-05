@@ -24,13 +24,17 @@
     ]
   },
   "tools_button": {
-    "primary": "mat-icon[data-mat-icon-name='page_info']",
+    "primary": "mat-icon[data-mat-icon-name='add_circle']",
     "fallbacks": [
+      "mat-icon[data-mat-icon-name='add']",
+      "mat-icon[data-mat-icon-name='page_info']",
       "role=button[name*='Tools' i]",
       "role=button[name*='Herramientas' i]",
       "button:has(mat-icon[data-mat-icon-name='page_info'])",
       "[aria-label*='Tools' i]",
-      "button:has-text('Tools')"
+      "button:has-text('Tools')",
+      "[aria-label*='Adjuntar' i]",
+      "[aria-label*='Attach' i]"
     ]
   },
   "mode_selector": {

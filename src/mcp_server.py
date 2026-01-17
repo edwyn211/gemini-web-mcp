@@ -200,9 +200,13 @@ async def execute_tasks_workflow(
     # Acquire session
     # Acquire initial session
     if new_chat:
+        logging.info("🧠 CHAT MGMT: Acquiring new isolated WORKER session...")
         gemini_actions = await session_manager.get_worker_session()
     else:
+        logging.info("🧠 CHAT MGMT: Acquiring shared MAIN session...")
         gemini_actions = await session_manager.get_main_session()
+
+    logging.info(f"🧠 CHAT MGMT: Session acquired. Current URL: {gemini_actions.page.url if gemini_actions.page else 'N/A'}")
 
     # AUTO-AUTH CHECK
     try:
@@ -273,9 +277,9 @@ async def execute_tasks_workflow(
             results = []
             current_state = initial_state
 
-            logging.info(f"\nStarting workflow with {len(tasks)} tasks...")
+            logging.info(f"\n🧠 CHAT MGMT: Starting workflow with {len(tasks)} tasks...")
             if tool:
-                logging.info(f"Using tool: {tool}")
+                logging.info(f"🧠 CHAT MGMT: Using tool: {tool}")
 
             # Step -1: Start new chat (with retries built-in)
             if new_chat:
@@ -431,7 +435,7 @@ async def execute_tasks_workflow(
                             metadata={"tool": tool, "skipped_prompt": skipped_prompt},
                         )
                     )
-                    logging.info(f"✅ TASK COMPLETED: {task.description}\nRESULT:\n{response_text}")
+                    logging.info(f"✅ TASK COMPLETED: {task.description}\nURL: {gemini_actions.page.url}\nRESULT:\n{response_text[:400]}...")
 
                     current_state["tasks"][task_index] = task
                     current_state["current_task_index"] += 1

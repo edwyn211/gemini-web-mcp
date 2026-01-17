@@ -125,7 +125,8 @@ class GeminiPageActions:
 
         :param text: The prompt text to send.
         """
-        logger.info(f"👤 SENDING PROMPT: '{text}'")
+        current_url = self.page.url
+        logger.info(f"🧠 CHAT MGMT: 👤 SENDING PROMPT in {current_url}: '{text[:100]}...'")
 
         try:
             # Wait for the textarea to be available
@@ -422,7 +423,7 @@ class GeminiPageActions:
         Clicks the 'New chat' button to start a fresh conversation.
         Enhanced with retry logic and validation.
         """
-        logger.info("Starting a new chat...")
+        logger.info("🧠 CHAT MGMT: Starting a new chat...")
 
         try:
             await self._try_selectors("new_chat_button", action="click", force=True)
@@ -430,7 +431,7 @@ class GeminiPageActions:
             # Validate that new chat started
             success, details = await self.validator.validate_chat_started(timeout=5000)
             if success:
-                logger.info("✓ New chat started and validated")
+                logger.info(f"🧠 CHAT MGMT: ✓ New chat started and validated. URL: {self.page.url}")
             else:
                 logger.warning(f"⚠ New chat validation unclear: {details}")
 
@@ -833,7 +834,7 @@ class GeminiPageActions:
         :param chat_title: The title of the chat to switch to
         :return: True if successful
         """
-        logger.info(f"Switching to chat: {chat_title}")
+        logger.info(f"🧠 CHAT MGMT: Switching to chat: {chat_title}")
         
         # Try finding the chat item in the sidebar
         try:
@@ -845,7 +846,7 @@ class GeminiPageActions:
                 await chat_item.click()
                 await self.page.wait_for_load_state("domcontentloaded")
                 await self.page.wait_for_timeout(2000)
-                logger.info(f"✓ Switched to chat: {chat_title}")
+                logger.info(f"🧠 CHAT MGMT: ✓ Switched to chat: {chat_title}. URL: {self.page.url}")
                 return True
             
             # Try partial match if exact match fails
@@ -855,7 +856,7 @@ class GeminiPageActions:
                 await chat_item.click()
                 await self.page.wait_for_load_state("domcontentloaded")
                 await self.page.wait_for_timeout(2000)
-                logger.info(f"✓ Switched to chat (partial match): {chat_title}")
+                logger.info(f"🧠 CHAT MGMT: ✓ Switched to chat (partial match): {chat_title}. URL: {self.page.url}")
                 return True
                 
             logger.warning(f"Chat '{chat_title}' not found in the list.")

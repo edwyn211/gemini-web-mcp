@@ -101,6 +101,10 @@ Lista y cambia entre conversaciones existentes en tu historial.
 #### 5. Monitoreo: `get_gemini_task_status` y `get_gemini_session_status`
 Consulta el progreso de tareas largas o verifica si la sesión sigue activa.
 
+#### 6. Gestión de Selectores: `verify_gemini_selectors` y `update_gemini_selector`
+Permite verificar si los selectores CSS siguen funcionando (detectando cambios en la UI de Gemini) y actualizarlos dinámicamente sin reiniciar el servidor.
+
+
 > [!IMPORTANT]
 > Al usar `new_chat: false` en `execute_gemini_tasks`, el agente NO resetea la sesión. Esto es fundamental para monitorear el progreso de `deep_research` o para mantener el contexto de una conversación fluida. Por defecto, `new_chat` es `true`.
 
@@ -145,6 +149,15 @@ El agente está diseñado para manejar tareas de larga duración (como Deep Rese
 Para más detalles, consulta:
 - [Arquitectura del Sistema](doc/ARCHITECTURE.md)
 - [Funcionamiento Asíncrono](doc/ASYNC_FLOW.md)
+- [Funcionamiento Asíncrono](doc/ASYNC_FLOW.md)
+
+### Gestión Dinámica de Selectores
+
+El sistema incluye un módulo de **Verificación de Selectores** que:
+1.  **Fuente de Verdad**: Usa **Redis** para almacenar la configuración de selectores. Si Redis está vacío, carga desde `config/selectors.json`.
+2.  **Validación**: Un script (`scripts/check_selectors.py`) y una herramienta MCP (`verify_gemini_selectors`) pueden lanzar un navegador para comprobar si los elementos críticos (`tools_button`, `send_button`, etc.) son visibles.
+3.  **Actualización en Caliente**: Si un selector falla, se puede actualizar usando `update_gemini_selector` y el cambio se aplica inmediatamente en todas las sesiones activas, persistiendo en Redis.
+4.  **Automatización**: Un cron job diario (8:00 AM) verifica automáticamente el estado de los selectores.
 
 ---
 
@@ -189,7 +202,8 @@ Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemen
 │   ├── mcp_server.py           # Servidor MCP y API HTTP
 │   ├── mcp_controller/
 │   │   ├── actions.py          # Lógica de interacción con Playwright (POM)
-│   │   └── selectors.py        # Carga de selectores desde JSON
+│   │   ├── selectors.py        # Gestión de selectores (Redis + File)
+│   │   └── selector_validator.py # Lógica de validación de elementos UI
 │   └── orchestrator/
 │       ├── graph.py            # Orquestación del workflow con LangGraph
 │       └── state.py            # Definición del estado del agente
@@ -200,6 +214,9 @@ Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemen
 │   └── NATURAL_LANGUAGE.md     # Guía de uso con lenguaje natural
 ├── config/
 │   └── selectors.json          # Selectores CSS (la parte más frágil)
+├── scripts/
+│   └── check_selectors.py      # Script de verificación para cron/manual
+├── cron_setup.sh               # Instalador del cron job diario
 ├── auth_setup.py               # Script para generar auth_state.json
 ├── auth_state.json             # Sesión guardada (ignorado por Git)
 ├── Dockerfile                  # Definición de la imagen del contenedor

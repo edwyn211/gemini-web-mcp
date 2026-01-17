@@ -21,3 +21,6 @@ profiles/
 logs.txt
 screenshots/
 .trunk/
+
+.playwright-mcp/
+debug_output/

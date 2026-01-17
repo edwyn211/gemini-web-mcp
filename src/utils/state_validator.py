@@ -156,15 +156,15 @@ class StateValidator:
                         f"El validador específico para {tool_name} no se encontró en el tiempo previsto."
                     )
 
-            # Fallback: Check if the tool button is still visible (might indicate it's selected)
-            # This is a weaker validation but better than nothing
-            logger.info(
-                f"⚠ Tool selection validation not available for {tool_name}, assuming success"
+            # Fallback: If validator is not found, we MUST return False to force a retry
+            # We strictly require validation to ensure the tool is actually active
+            logger.warning(
+                f"✗ Tool selection validation failed for {tool_name}: Validator element not found"
             )
-            return True, {
+            return False, {
                 "tool": tool_name,
-                "status": "assumed_active",
-                "note": "no_validator",
+                "status": "validation_failed",
+                "note": "validator_element_missing",
             }
 
         except Exception as e:

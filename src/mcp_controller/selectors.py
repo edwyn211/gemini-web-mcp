@@ -181,8 +181,37 @@ def load_selectors(config_path: Path) -> GeminiSelectors:
 
 # Define the default path to the selectors config relative to the project root
 # This assumes the script is run from the project root.
-# When containerized, the path needs to be consistent.
 CONFIG_PATH = Path("config/selectors.json")
 
-# Load the selectors once when the module is imported
-gemini_selectors = load_selectors(CONFIG_PATH)
+
+class SelectorsManager:
+    """
+    Singleton to manage the current state of selectors.
+    Allows dynamic updates at runtime (e.g. from Redis).
+    """
+
+    def __init__(self):
+        self._selectors: GeminiSelectors = load_selectors(CONFIG_PATH)
+
+    @property
+    def current(self) -> GeminiSelectors:
+        """Get the current active selectors."""
+        return self._selectors
+
+    def update(self, new_selectors: GeminiSelectors):
+        """Update the active selectors."""
+        self._selectors = new_selectors
+        
+    def update_from_dict(self, data: Dict[str, Any]):
+        """Update from a dictionary configuration."""
+        self._selectors = GeminiSelectors(**data)
+
+
+# Global singleton instance
+selector_manager = SelectorsManager()
+
+# For backward compatibility (though using selector_manager.current is preferred)
+# properties of this object won't update automatically if imported directly as 'from selectors import gemini_selectors'
+# but 'gemini_selectors' variable here will stay pointing to the initial object.
+# Consumers should be updated to use selector_manager.current
+gemini_selectors = selector_manager.current

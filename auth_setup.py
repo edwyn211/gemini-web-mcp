@@ -28,6 +28,10 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 USER_DATA_DIR = Path("profiles/default")
 AUTH_STATE_FILE = Path("auth_state.json")
 
+# Configurable Timeouts
+TIMEOUT_SELECTOR = int(os.getenv("AUTH_TIMEOUT_SELECTOR", 30000)) # Default 30s
+TIMEOUT_NAVIGATION = int(os.getenv("AUTH_TIMEOUT_NAVIGATION", 60000)) # Default 60s
+
 async def login_if_needed(page, email, password):
     """
     Attempts to log in to Google if the login page is detected.
@@ -74,7 +78,7 @@ async def login_if_needed(page, email, password):
                         try:
                             # Wait reasonably long for password field, but it might not show if
                             # we are redirected to passkey/2FA immediately
-                            await page.wait_for_selector('input[type="password"]', state="visible", timeout=5000)
+                            await page.wait_for_selector('input[type="password"]', state="visible", timeout=TIMEOUT_SELECTOR)
                             await page.fill('input[type="password"]', password)
                             await page.click('#passwordNext')
                         except Exception as e:
@@ -84,6 +88,19 @@ async def login_if_needed(page, email, password):
                     logging.info("Please complete 2FA or any other verification steps manually if asked.")
                 else:
                     logging.warning("No credentials found in .env. Please login manually.")
+            elif await page.query_selector('input[type="password"]'):
+                 logging.info("Password field found (Saved Account flow). Entering password...")
+                 if password:
+                    try:
+                        await page.wait_for_selector('input[type="password"]', state="visible", timeout=TIMEOUT_SELECTOR)
+                        await page.fill('input[type="password"]', password)
+                        await page.click('#passwordNext')
+                        logging.info("\nCurrent URL: " + page.url)
+                    except Exception as e:
+                         logging.warning(f"Error filling password in saved account flow: {e}")
+                 else:
+                     logging.warning("Password field found but no password in env vars.")
+
             else:
                  logging.info("No standard email field found. Attempting to detect if already logged in...")
 
@@ -170,7 +187,7 @@ async def main():
         # Periodic screenshot task removed as per user request.
 
         try:
-            await page.goto("https://gemini.google.com/", timeout=60000)
+            await page.goto("https://gemini.google.com/", timeout=TIMEOUT_NAVIGATION)
         except Exception as e:
             logging.warning(f"Navigation timeout/error: {e}")
 
@@ -188,8 +205,8 @@ async def main():
             # We wait for 'rich-textarea' which is the main input box
             # Added timeout of 180 seconds (3 minutes) as requested
             try:
-                logging.info("Waiting for main chat interface (timeout: 180s)...")
-                await page.wait_for_selector('rich-textarea', state="visible", timeout=180000)
+                logging.info(f"Waiting for main chat interface (timeout: {int(TIMEOUT_NAVIGATION/1000)}s)...")
+                await page.wait_for_selector('rich-textarea', state="visible", timeout=TIMEOUT_NAVIGATION * 3) # Wait longer for load
             except Exception as e:
                 logging.error("Timeout waiting for chat interface! Login might have failed or 2FA took too long.")
                 screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"

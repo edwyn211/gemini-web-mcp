@@ -24,17 +24,21 @@
     ]
   },
   "tools_button": {
-    "primary": "mat-icon[data-mat-icon-name='add_circle']",
+    "primary": "button:has-text('Herramientas')",
     "fallbacks": [
-      "mat-icon[data-mat-icon-name='add']",
-      "mat-icon[data-mat-icon-name='page_info']",
-      "role=button[name*='Tools' i]",
-      "role=button[name*='Herramientas' i]",
-      "button:has(mat-icon[data-mat-icon-name='page_info'])",
-      "[aria-label*='Tools' i]",
       "button:has-text('Tools')",
-      "[aria-label*='Adjuntar' i]",
-      "[aria-label*='Attach' i]"
+      "role=button[name*='Herramientas' i]",
+      "role=button[name*='Tools' i]",
+      "[aria-label*='Herramientas' i]",
+      "[aria-label*='Tools' i]",
+      "mat-icon[data-mat-icon-name='page_info']",
+      "button:has(mat-icon[data-mat-icon-name='page_info'])",
+      "mat-icon[data-mat-icon-name='extension']",
+      "button:has(mat-icon[data-mat-icon-name='extension'])",
+      "mat-icon[data-mat-icon-name='tune']",
+      "button:has(mat-icon[data-mat-icon-name='tune'])",
+      "[aria-label*='Extension' i]",
+      "[aria-label*='Complementos' i]"
     ]
   },
   "mode_selector": {
@@ -58,9 +62,11 @@
       "button:has-text('Canvas')",
       "mat-icon[data-mat-icon-name='note_stack_add']:visible",
       "[aria-label*='Canvas' i]",
-      "button:has(mat-icon[data-mat-icon-name='note_stack_add'])"
+      "button:has(mat-icon[data-mat-icon-name='note_stack_add'])",
+      "button:has(mat-icon[data-mat-icon-name='description'])",
+      "mat-icon[data-mat-icon-name='description']"
     ],
-    "validator": ".canvas-active, [data-tool='canvas']"
+    "validator": "button.toolbox-drawer-item-deselect-button:has-text('Canvas'), toolbox-drawer button:has-text('Canvas'), .pill-container button:has-text('Canvas')"
   },
   "deep_research_button": {
     "primary": "[role='group'] button:has-text('Deep Research')",
@@ -73,7 +79,7 @@
       "[aria-label*='Deep Research' i]",
       "[aria-label*='Investigación profunda' i]"
     ],
-    "validator": ".deep-research-active, [data-tool='deep_research']"
+    "validator": "button.toolbox-drawer-item-deselect-button:has-text('Deep Research'), button.toolbox-drawer-item-deselect-button:has-text('Investigación profunda'), toolbox-drawer button:has-text('Deep Research'), toolbox-drawer button:has-text('Investigación profunda')"
   },
   "canvas_content": {
     "primary": "div.canvas-editor-content",

@@ -13,6 +13,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - AUTH_MAX_RETRIES=3
       - AUTH_RETRY_DELAY_SECONDS=60
+      - AUTH_TIMEOUT_SELECTOR=30000
+      - AUTH_TIMEOUT_NAVIGATION=60000
     depends_on:
       - redis
 

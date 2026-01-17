@@ -6,7 +6,7 @@ from typing import Dict, List
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-from mcp_controller.selectors import gemini_selectors
+from mcp_controller.selectors import selector_manager
 from utils.retry_handler import retry_async
 from utils.screenshot_manager import ScreenshotManager
 from utils.state_validator import StateValidator
@@ -31,7 +31,7 @@ class GeminiPageActions:
         :param page: An authenticated Playwright Page object.
         """
         self.page = page
-        self.validator = StateValidator(page, gemini_selectors)
+        self.validator = StateValidator(page, selector_manager.current)
         self.screenshot_manager = ScreenshotManager()
         self.execution_lock = asyncio.Lock()
 
@@ -50,7 +50,7 @@ class GeminiPageActions:
         Returns:
             Result of the action, or raises exception if all selectors fail
         """
-        selectors = gemini_selectors.get_all_selectors(selector_field)
+        selectors = selector_manager.current.get_all_selectors(selector_field)
         last_error = None
 
         for i, selector in enumerate(selectors):
@@ -137,7 +137,7 @@ class GeminiPageActions:
             await self.page.wait_for_timeout(2000)
 
             # Type the text - OPTIMIZED: Use evaluate for instant insertion to avoid timeouts with large prompts
-            textarea_selector = gemini_selectors.get_primary("prompt_textarea")
+            textarea_selector = selector_manager.current.get_primary("prompt_textarea")
 
             # Use locator.evaluate to handle the DOM element directly, avoiding selector parsing issues in JS
             # This simulates a "paste" operation by setting innerText and triggering multiple events
@@ -159,7 +159,7 @@ class GeminiPageActions:
             # Wait specifically for the send button to become visible
             logger.info("Waiting for send button to appear...")
             try:
-                send_selectors = gemini_selectors.get_all_selectors("send_button")
+                send_selectors = selector_manager.current.get_all_selectors("send_button")
                 primary_send = send_selectors[0]
                 await self.page.wait_for_selector(primary_send, state="visible", timeout=5000)
             except Exception:
@@ -190,21 +190,21 @@ class GeminiPageActions:
         """
         try:
             # 1. Check for Stop button
-            stop_selectors = gemini_selectors.get_all_selectors("stop_button")
+            stop_selectors = selector_manager.current.get_all_selectors("stop_button")
             for selector in stop_selectors:
                 if await self.page.is_visible(selector):
                     logger.info("Generation in progress: Stop button is visible")
                     return True
 
             # 2. Check for Mic button (only visible when idle and textarea empty)
-            mic_selectors = gemini_selectors.get_all_selectors("mic_button")
+            mic_selectors = selector_manager.current.get_all_selectors("mic_button")
             for selector in mic_selectors:
                 if await self.page.is_visible(selector):
                     logger.info("Not generating: Mic button is visible")
                     return False
 
             # 3. Check if Send button is visible
-            send_selectors = gemini_selectors.get_all_selectors("send_button")
+            send_selectors = selector_manager.current.get_all_selectors("send_button")
             for selector in send_selectors:
                 if await self.page.is_visible(selector):
                     logger.info("Not generating: Send button is visible")
@@ -212,6 +212,22 @@ class GeminiPageActions:
 
             # 4. If neither Stop, Send, nor Mic is visible, it might be busy or in an unusual state
             # but usually it's considered "generating" if Send/Mic are missing
+            # logger.info("Neither Stop, Send, nor Mic visible - checking for progress indicators...")
+            
+            # Additional check for generic progress/busy indicators if available
+            busy_indicators = [
+                "mat-progress-bar",
+                ".typing-indicator",
+                "div[role='progressbar']"
+            ]
+            for selector in busy_indicators:
+                try:
+                    if await self.page.is_visible(selector, timeout=500):
+                        logger.info(f"Generation in progress: Busy indicator '{selector}' visible")
+                        return True
+                except Exception:
+                    continue
+
             logger.info("Neither Stop, Send, nor Mic visible - likely in progress or transitioning")
             return True
         except Exception as e:
@@ -226,7 +242,7 @@ class GeminiPageActions:
         logger.info("Checking for Canvas content...")
         try:
             # Check if we have a canvas content selector
-            canvas_selectors = gemini_selectors.get_all_selectors("canvas_content")
+            canvas_selectors = selector_manager.current.get_all_selectors("canvas_content")
 
             for selector in canvas_selectors:
                 elements = await self.page.query_selector_all(selector)
@@ -251,7 +267,7 @@ class GeminiPageActions:
         logger.info("Verificando si hay contenido del informe de Deep Research...")
         try:
             # Obtener selectores para el contenido de investigación profunda
-            research_selectors = gemini_selectors.get_all_selectors(
+            research_selectors = selector_manager.current.get_all_selectors(
                 "deep_research_content"
             )
 
@@ -318,7 +334,7 @@ class GeminiPageActions:
             # Check for "Show more" buttons before grabbing text
             try:
                 # Check for explicit "Show more" buttons
-                show_more_selectors = gemini_selectors.get_all_selectors("show_more")
+                show_more_selectors = selector_manager.current.get_all_selectors("show_more")
                 for selector in show_more_selectors:
                     try:
                         show_more_btn = await self.page.query_selector(selector)
@@ -332,7 +348,7 @@ class GeminiPageActions:
                 logger.debug(f"Error checking show more buttons: {e}")
 
             # Probar selectores de respuesta normales
-            response_selectors = gemini_selectors.get_all_selectors("last_response")
+            response_selectors = selector_manager.current.get_all_selectors("last_response")
 
             # Get all potential response elements first
             candidates = []
@@ -452,33 +468,16 @@ class GeminiPageActions:
         try:
             # 1. Click the Tools button to open the menu
             logger.info("Opening tools menu...")
-            await self._try_selectors(
-                "tools_button", action="wait", state="attached", timeout=10000
-            )
-
-            # Since we need to click the icon's parent, we find the element first
-            tools_icon = await self._try_selectors("tools_button", action="get_element")
-            if tools_icon:
-                await tools_icon.evaluate("el => el.parentElement.click()")
-            else:
-                # Fallback to direct click if get_element failed but _try_selectors wait passed
-                # (though this branch is unlikely given _try_selectors logic)
-                await self._try_selectors("tools_button", action="click", force=True)
+            # Direct click works for both icons and buttons
+            await self._try_selectors("tools_button", action="click", force=True)
 
             await self.page.wait_for_timeout(1500)
 
             # 2. Wait for and click the specific tool
             logger.info(f"Clicking {tool_name} button...")
-            await self._try_selectors(
-                tool_field, action="wait", state="attached", timeout=10000
-            )
-
-            # Click the parent button of the tool icon
-            tool_icon = await self._try_selectors(tool_field, action="get_element")
-            if tool_icon:
-                await tool_icon.evaluate("el => el.parentElement.click()")
-            else:
-                await self._try_selectors(tool_field, action="click", force=True)
+            
+            # Direct click works for both icons and buttons
+            await self._try_selectors(tool_field, action="click", force=True)
 
             await self.page.wait_for_timeout(1500)
 
@@ -489,7 +488,9 @@ class GeminiPageActions:
             if success:
                 logger.info(f"✓ Tool '{tool_name}' selected and validated")
             else:
-                logger.info(f"⚠ Tool selection validation not available: {details}")
+                error_msg = f"Tool selection validation failed for '{tool_name}': {details}"
+                logger.error(f"✗ {error_msg}")
+                raise Exception(error_msg)
 
         except Exception as e:
             logger.error(f"Error selecting tool '{tool_name}': {e}")
@@ -591,7 +592,7 @@ class GeminiPageActions:
             )
 
             # Check current mode
-            mode_selector = gemini_selectors.get_primary("mode_selector")
+            mode_selector = selector_manager.current.get_primary("mode_selector")
             mode_element = await self.page.query_selector(mode_selector)
 
             if mode_element:
@@ -606,7 +607,7 @@ class GeminiPageActions:
                 )
 
                 # Obtener la configuración del selector de modo
-                mode_config = gemini_selectors.mode_selector
+                mode_config = selector_manager.current.mode_selector
                 dropdown_icon = (
                     mode_config.dropdown_icon
                     if hasattr(mode_config, "dropdown_icon")

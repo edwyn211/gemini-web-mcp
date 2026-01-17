@@ -12,7 +12,10 @@ import uuid
 
 from mcp_controller.actions import GeminiPageActions
 from mcp_controller.session_manager import SessionManager
+from mcp_controller.selectors import selector_manager, GeminiSelectors
+from mcp_controller.selector_validator import SelectorValidator
 from orchestrator.state import AgentState, Task
+import json
 
 # Configure logging
 logging.basicConfig(
@@ -37,6 +40,19 @@ async def get_redis() -> redis.Redis:
     if redis_client is None:
         redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         redis_client = redis.from_url(redis_url, decode_responses=True)
+        # Try to load selectors from Redis on startup/first access
+        try:
+            stored_selectors = await redis_client.get("gemini:selectors")
+            if stored_selectors:
+                logging.info("Loading selectors from Redis cache...")
+                selector_manager.update_from_dict(json.loads(stored_selectors))
+            else:
+                logging.info("No selectors in Redis, using default config and caching it...")
+                # Cache current defaults to Redis
+                await redis_client.set("gemini:selectors", selector_manager.current.model_dump_json())
+        except Exception as e:
+            logging.error(f"Failed to sync selectors with Redis: {e}")
+            
     return redis_client
 
 
@@ -225,229 +241,247 @@ async def execute_tasks_workflow(
     if request_id:
         active_task_sessions[request_id] = gemini_actions
 
-    try:
-        # Create tasks from descriptions
-        tasks = [Task(description=desc, completed=False) for desc in task_descriptions]
-
-        if not request_id:
-            request_id = str(uuid.uuid4())
-        initial_state: AgentState = {"tasks": tasks, "current_task_index": 0}
-
-        # Initial save to Redis with 'processing' status
+    # USE SESSION LOCK TO SYNC CONCURRENT REQUESTS TO THE SAME PAGE
+    async with gemini_actions.execution_lock:
         try:
-            r = await get_redis()
-            initial_response = TaskResponse(
-                status="processing",
-                message=f"Starting processing of {len(tasks)} tasks.",
-                tasks_completed=0,
-                total_tasks=len(tasks),
-                results=[],
-                request_id=request_id,
-            )
-            await r.setex(
-                f"gemini:response:{request_id}", 86400, initial_response.model_dump_json()
-            )
-            logging.info(f"✅ Task initialized in Redis with ID: {request_id}")
-        except Exception as e:
-            logging.error(f"❌ Failed to initialize task in Redis: {e}")
+            # Create tasks from descriptions
+            tasks = [Task(description=desc, completed=False) for desc in task_descriptions]
 
-        # Execute workflow
-        results = []
-        current_state = initial_state
+            if not request_id:
+                request_id = str(uuid.uuid4())
+            initial_state: AgentState = {"tasks": tasks, "current_task_index": 0}
 
-        logging.info(f"\nStarting workflow with {len(tasks)} tasks...")
-        if tool:
-            logging.info(f"Using tool: {tool}")
-
-        # Step -1: Start new chat (with retries built-in)
-        if new_chat:
+            # Initial save to Redis with 'processing' status
             try:
-                await gemini_actions.start_new_chat()
-                await asyncio.sleep(2)  # Wait for new chat to load
+                r = await get_redis()
+                initial_response = TaskResponse(
+                    status="processing",
+                    message=f"Starting processing of {len(tasks)} tasks.",
+                    tasks_completed=0,
+                    total_tasks=len(tasks),
+                    results=[],
+                    request_id=request_id,
+                )
+                await r.setex(
+                    f"gemini:response:{request_id}", 86400, initial_response.model_dump_json()
+                )
+                logging.info(f"✅ Task initialized in Redis with ID: {request_id}")
             except Exception as e:
-                logging.error(f"❌ Failed to start new chat after retries: {e}")
-                if screenshot_manager:
-                    await screenshot_manager.capture_error(
-                        gemini_actions.page, "start_new_chat_workflow", e
-                    )
-                # Continue anyway, might still work
+                logging.error(f"❌ Failed to initialize task in Redis: {e}")
 
-            # Step 0: Ensure Reasoning mode is active (with retries built-in)
-            try:
-                await gemini_actions.ensure_reasoning_mode()
-            except Exception as e:
-                logging.error(f"❌ Failed to ensure Reasoning mode after retries: {e}")
-                if screenshot_manager:
-                    await screenshot_manager.capture_error(
-                        gemini_actions.page, "ensure_reasoning_mode_workflow", e
-                    )
-                # Continue anyway, might still work in current mode
+            # Execute workflow
+            results = []
+            current_state = initial_state
 
-            # Step 1: Select tool if specified (with retries built-in)
+            logging.info(f"\nStarting workflow with {len(tasks)} tasks...")
             if tool:
+                logging.info(f"Using tool: {tool}")
+
+            # Step -1: Start new chat (with retries built-in)
+            if new_chat:
                 try:
-                    await gemini_actions.select_tool(tool)
+                    await gemini_actions.start_new_chat()
+                    await asyncio.sleep(2)  # Wait for new chat to load
                 except Exception as e:
-                    logging.error(f"❌ Failed to select tool '{tool}' after retries: {e}")
+                    logging.error(f"❌ Failed to start new chat after retries: {e}")
                     if screenshot_manager:
                         await screenshot_manager.capture_error(
-                            gemini_actions.page, f"select_tool_{tool}_workflow", e
+                            gemini_actions.page, "start_new_chat_workflow", e
                         )
-                    # This is critical, return error
-                    return TaskResponse(
-                        status="error",
-                        message=f"Failed to select tool '{tool}': {str(e)}",
-                        tasks_completed=0,
-                        total_tasks=len(tasks),
-                        results=[
-                            TaskResult(
-                                task_index=0,
-                                description="Tool selection",
-                                status="error",
-                                error=str(e),
-                                metadata={"tool": tool},
-                            )
-                        ],
-                    )
-        else:
-            logging.info("Continuing existing chat session (new_chat=False)")
+                    # Continue anyway, might still work
 
-        # Step 2: Process first task (send the query)
-        if len(tasks) > 0:
-            task_index = 0
-            task = current_state["tasks"][task_index]
-
-            logging.info(
-                f"Processing task {task_index + 1}/{len(tasks)}: {task.description}"
-            )
-
-            try:
-                skipped_prompt = False
-
-                # Check for ongoing generation if we are continuing a chat
-                if not new_chat and await gemini_actions.is_generating():
-                    logging.info(
-                        "⏳ Generation currently in progress. Waiting for it to complete instead of sending new prompt..."
-                    )
-
-                    # Wait for the current generation to finish
-                    # Use a very long timeout (30 mins) specifically for Deep Research cases
-                    wait_timeout = (
-                        1800000 if tool and tool.lower() == "deep_research" else 300000
-                    )
-                    (
-                        success,
-                        details,
-                    ) = await gemini_actions.validator.validate_generation_complete(
-                        timeout=wait_timeout
-                    )
-
-                    if success:
-                        logging.info("✓ Ongoing generation finished. Retrieving result.")
-                        skipped_prompt = True
-                    else:
-                        logging.warning(
-                            f"⚠ Timeout waiting for ongoing generation: {details}"
+                # Step 0: Ensure Reasoning mode is active (with retries built-in)
+                try:
+                    await gemini_actions.ensure_reasoning_mode()
+                except Exception as e:
+                    logging.error(f"❌ Failed to ensure Reasoning mode after retries: {e}")
+                    if screenshot_manager:
+                        await screenshot_manager.capture_error(
+                            gemini_actions.page, "ensure_reasoning_mode_workflow", e
                         )
-                        # If timeout, we might try to proceed or just error out.
-                        # For now, let's assume we can try to retrieve what we have or fail gracefully.
+                    # Continue anyway, might still work in current mode
 
-                if not skipped_prompt:
-                    # Send the prompt normally
-                    await gemini_actions.send_prompt(task.description)
-
-                # Step 3: If Deep Research, wait for plan and confirm (with retries built-in)
-                # Only do this if we actually sent a prompt OR if we didn't confirm yet
-                if tool and tool.lower() == "deep_research" and not skipped_prompt:
-                    logging.info("🔍 Deep Research detected - waiting for plan...")
+                # Step 1: Select tool if specified (with retries built-in)
+                if tool:
                     try:
-                        # Increased timeout for Deep Research plan generation
-                        await gemini_actions.wait_for_deep_research_plan()
-                        await gemini_actions.confirm_deep_research_plan()
-                        logging.info(
-                            "✅ Deep Research plan confirmed. Research is now running."
-                        )
-                    except Exception as dr_error:
-                        logging.error(
-                            f"❌ Deep Research plan confirmation failed: {dr_error}"
-                        )
+                        await gemini_actions.select_tool(tool)
+                    except Exception as e:
+                        logging.error(f"❌ Failed to select tool '{tool}' after retries: {e}")
                         if screenshot_manager:
                             await screenshot_manager.capture_error(
-                                gemini_actions.page, "deep_research_plan_workflow", dr_error
+                                gemini_actions.page, f"select_tool_{tool}_workflow", e
                             )
-                        # Return error for Deep Research failures
+                        # This is critical, return error
                         return TaskResponse(
                             status="error",
-                            message=f"Deep Research plan failed: {str(dr_error)}",
+                            message=f"Failed to select tool '{tool}': {str(e)}",
                             tasks_completed=0,
                             total_tasks=len(tasks),
                             results=[
                                 TaskResult(
-                                    task_index=task_index,
-                                    description=task.description,
+                                    task_index=0,
+                                    description="Tool selection",
                                     status="error",
-                                    error=str(dr_error),
-                                    metadata={"tool": tool, "phase": "deep_research_plan"},
+                                    error=str(e),
+                                    metadata={"tool": tool},
                                 )
                             ],
                         )
+            else:
+                logging.info("Continuing existing chat session (new_chat=False)")
 
-                # Obtener respuesta - usar un tiempo de espera mucho mayor para Deep Research
-                # Si saltamos el prompt, asumimos que estamos esperando un Deep Research largo o similar
-                response_timeout = (
-                    1800000
-                    if (tool and tool.lower() == "deep_research") or skipped_prompt
-                    else 240000
-                )
-                response_text = await gemini_actions.get_last_response(
-                    timeout=response_timeout, tool=tool
+            # Step 2: Process first task (send the query)
+            if len(tasks) > 0:
+                task_index = 0
+                task = current_state["tasks"][task_index]
+
+                logging.info(
+                    f"Processing task {task_index + 1}/{len(tasks)}: {task.description}"
                 )
 
-                task.completed = True
-                results.append(
-                    TaskResult(
-                        task_index=task_index,
-                        description=task.description,
-                        status="completed",
-                        result=response_text,
-                        metadata={"tool": tool, "skipped_prompt": skipped_prompt},
+                try:
+                    skipped_prompt = False
+
+                    # Check for ongoing generation if we are continuing a chat
+                    if not new_chat and await gemini_actions.is_generating():
+                        logging.info(
+                            "⏳ Generation currently in progress. Waiting for it to complete instead of sending new prompt..."
+                        )
+
+                        # Wait for the current generation to finish
+                        # Use a very long timeout (30 mins) specifically for Deep Research cases
+                        wait_timeout = (
+                            1800000 if tool and tool.lower() == "deep_research" else 300000
+                        )
+                        (
+                            success,
+                            details,
+                        ) = await gemini_actions.validator.validate_generation_complete(
+                            timeout=wait_timeout
+                        )
+
+                        if success:
+                            logging.info("✓ Ongoing generation finished. Retrieving result.")
+                            skipped_prompt = True
+                        else:
+                            logging.warning(
+                                f"⚠ Timeout waiting for ongoing generation: {details}"
+                            )
+                            # If timeout, we might try to proceed or just error out.
+                            # For now, let's assume we can try to retrieve what we have or fail gracefully.
+
+                    if not skipped_prompt:
+                        # Send the prompt normally
+                        await gemini_actions.send_prompt(task.description)
+
+                    # Step 3: If Deep Research, wait for plan and confirm (with retries built-in)
+                    # Only do this if we actually sent a prompt OR if we didn't confirm yet
+                    if tool and tool.lower() == "deep_research" and not skipped_prompt:
+                        logging.info("🔍 Deep Research detected - waiting for plan...")
+                        try:
+                            # Increased timeout for Deep Research plan generation
+                            await gemini_actions.wait_for_deep_research_plan()
+                            await gemini_actions.confirm_deep_research_plan()
+                            logging.info(
+                                "✅ Deep Research plan confirmed. Research is now running."
+                            )
+                        except Exception as dr_error:
+                            logging.error(
+                                f"❌ Deep Research plan confirmation failed: {dr_error}"
+                            )
+                            if screenshot_manager:
+                                await screenshot_manager.capture_error(
+                                    gemini_actions.page, "deep_research_plan_workflow", dr_error
+                                )
+                            # Return error for Deep Research failures
+                            return TaskResponse(
+                                status="error",
+                                message=f"Deep Research plan failed: {str(dr_error)}",
+                                tasks_completed=0,
+                                total_tasks=len(tasks),
+                                results=[
+                                    TaskResult(
+                                        task_index=task_index,
+                                        description=task.description,
+                                        status="error",
+                                        error=str(dr_error),
+                                        metadata={"tool": tool, "phase": "deep_research_plan"},
+                                    )
+                                ],
+                            )
+
+                    # Obtener respuesta - usar un tiempo de espera mucho mayor para Deep Research
+                    # Si saltamos el prompt, asumimos que estamos esperando un Deep Research largo o similar
+                    response_timeout = (
+                        1800000
+                        if (tool and tool.lower() == "deep_research") or skipped_prompt
+                        else 240000
                     )
+                    response_text = await gemini_actions.get_last_response(
+                        timeout=response_timeout, tool=tool
+                    )
+
+                    task.completed = True
+                    results.append(
+                        TaskResult(
+                            task_index=task_index,
+                            description=task.description,
+                            status="completed",
+                            result=response_text,
+                            metadata={"tool": tool, "skipped_prompt": skipped_prompt},
+                        )
+                    )
+                    logging.info(f"✅ TASK COMPLETED: {task.description}\nRESULT:\n{response_text}")
+
+                    current_state["tasks"][task_index] = task
+                    current_state["current_task_index"] += 1
+
+                except Exception as e:
+                    logging.error(f"Error processing task: {e}")
+                    results.append(
+                        TaskResult(
+                            task_index=task_index,
+                            description=task.description,
+                            status="error",
+                            error=str(e),
+                            metadata={"tool": tool},
+                        )
+                    )
+
+            logging.info("Workflow completed successfully.")
+
+            completed_count = len([r for r in results if r.status == "completed"])
+            overall_status = (
+                "success"
+                if completed_count == len(tasks)
+                else "partial_success"
+                if completed_count > 0
+                else "error"
+            )
+
+            current_url = gemini_actions.page.url if gemini_actions.page else None
+
+            # Save final result to Redis
+            try:
+                r = await get_redis()
+                # Store result for 24 hours
+                response_model = TaskResponse(
+                    status=overall_status,
+                    message=f"Processed {len(results)} tasks. {completed_count}/{len(tasks)} successful.",
+                    tasks_completed=completed_count,
+                    total_tasks=len(tasks),
+                    results=results,
+                    chat_url=current_url,
+                    request_id=request_id,
                 )
-                logging.info(f"✅ TASK COMPLETED: {task.description}\nRESULT:\n{response_text}")
-
-                current_state["tasks"][task_index] = task
-                current_state["current_task_index"] += 1
-
+                await r.setex(
+                    f"gemini:response:{request_id}", 86400, response_model.model_dump_json()
+                )
+                logging.info(f"✅ Final response saved to Redis with ID: {request_id}")
             except Exception as e:
-                logging.error(f"Error processing task: {e}")
-                results.append(
-                    TaskResult(
-                        task_index=task_index,
-                        description=task.description,
-                        status="error",
-                        error=str(e),
-                        metadata={"tool": tool},
-                    )
-                )
+                logging.error(f"❌ Failed to save final response to Redis: {e}")
 
-        logging.info("Workflow completed successfully.")
-
-        completed_count = len([r for r in results if r.status == "completed"])
-        overall_status = (
-            "success"
-            if completed_count == len(tasks)
-            else "partial_success"
-            if completed_count > 0
-            else "error"
-        )
-
-        current_url = gemini_actions.page.url if gemini_actions.page else None
-
-        # Save final result to Redis
-        try:
-            r = await get_redis()
-            # Store result for 24 hours
-            response_model = TaskResponse(
+            return TaskResponse(
                 status=overall_status,
                 message=f"Processed {len(results)} tasks. {completed_count}/{len(tasks)} successful.",
                 tasks_completed=completed_count,
@@ -456,32 +490,26 @@ async def execute_tasks_workflow(
                 chat_url=current_url,
                 request_id=request_id,
             )
-            await r.setex(
-                f"gemini:response:{request_id}", 86400, response_model.model_dump_json()
-            )
-            logging.info(f"✅ Final response saved to Redis with ID: {request_id}")
+
         except Exception as e:
-            logging.error(f"❌ Failed to save final response to Redis: {e}")
-
-        return TaskResponse(
-            status=overall_status,
-            message=f"Processed {len(results)} tasks. {completed_count}/{len(tasks)} successful.",
-            tasks_completed=completed_count,
-            total_tasks=len(tasks),
-            results=results,
-            chat_url=current_url,
-            request_id=request_id,
-        )
-
-    finally:
-        # Cleanup
-        if request_id and request_id in active_task_sessions:
-            del active_task_sessions[request_id]
-        
-        # Release session if it's a worker (new_chat=True)
-        # Main session (new_chat=False) is kept active
-        if new_chat:
-            await session_manager.release_session(gemini_actions)
+            logging.error(f"Critical error in execute_tasks_workflow: {e}")
+            return TaskResponse(
+                status="error",
+                message=f"Critical workflow error: {str(e)}",
+                tasks_completed=0,
+                total_tasks=len(task_descriptions),
+                results=[],
+                request_id=request_id,
+            )
+        finally:
+            # Cleanup
+            if request_id and request_id in active_task_sessions:
+                del active_task_sessions[request_id]
+            
+            # Release session if it's a worker (new_chat=True)
+            # Main session (new_chat=False) is kept active
+            if new_chat:
+                await session_manager.release_session(gemini_actions)
 
 
 @mcp.tool()
@@ -784,6 +812,119 @@ async def switch_gemini_chat(chat_title: str) -> GenericResponse:
         logging.error(f"Error switching chat: {e}")
         return GenericResponse(status="error", message=str(e))
 
+
+async def execute_get_gemini_task_status(
+    request_id: str, offset: int = 0, max_chars: int = 100000
+) -> StatusResponse:
+    """Implementation of get_gemini_task_status for testing and internal use."""
+    global active_task_sessions
+    
+    try:
+        r = await get_redis()
+        data = await r.get(f"gemini:response:{request_id}")
+
+        if not data:
+            return StatusResponse(
+                status="not_found",
+                is_generating=False,
+                tasks_completed=0,
+                total_tasks=0,
+                results=[],
+                message="Request ID not found in Redis."
+            )
+
+        response = TaskResponse.model_validate_json(data)
+        
+        # Check active session for generation status
+        is_generating = False
+        if request_id in active_task_sessions:
+            try:
+                is_generating = await active_task_sessions[request_id].is_generating()
+            except Exception:
+                pass
+
+        # Apply offset and limit to results
+        # ... logic ...
+        return StatusResponse(
+            status=response.status,
+            is_generating=is_generating,
+            tasks_completed=response.tasks_completed,
+            total_tasks=response.total_tasks,
+            results=response.results, # Should implement truncation here if needed
+            chat_url=response.chat_url,
+            message=response.message
+        )
+    except Exception as e:
+        logging.error(f"Error retrieving task status: {e}")
+        return StatusResponse(
+            status="error",
+            is_generating=False,
+            tasks_completed=0,
+            total_tasks=0,
+            results=[],
+            message=str(e)
+        )
+
+
+@mcp.tool()
+async def verify_gemini_selectors() -> Dict[str, Any]:
+    """
+    Verify the current Gemini selectors against the live web interface.
+    
+    Use this tool to check if the UI has changed and selectors are broken.
+    It returns a report of working and broken selectors.
+    
+    Returns:
+        JSON report with 'status', 'broken_selectors', and 'logs'.
+    """
+    global session_manager
+    validator = SelectorValidator(session_manager)
+    try:
+        report = await validator.validate_all()
+        return report
+    except Exception as e:
+        logging.error(f"Error verifying selectors: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+@mcp.tool()
+async def update_gemini_selector(selector_name: str, selector_value: Dict[str, Any]) -> GenericResponse:
+    """
+    Update a specific selector configuration dynamically.
+    
+    Use this tool to fix a broken selector found by verification.
+    The change is applied immediately and persisted to Redis.
+    
+    Args:
+        selector_name: The name of the selector field (e.g., 'tools_button', 'send_button').
+        selector_value: The new configuration dict (e.g., {'primary': '...', 'fallbacks': [...]}).
+        
+    Returns:
+        GenericResponse indicating success.
+    """
+    try:
+        # Get current state
+        current_data = selector_manager.current.model_dump()
+        
+        # Update field
+        if selector_name not in current_data:
+             return GenericResponse(status="error", message=f"Selector '{selector_name}' does not exist.")
+             
+        current_data[selector_name] = selector_value
+        
+        # Validate/Apply to manager
+        selector_manager.update_from_dict(current_data)
+        
+        # Save to Redis
+        r = await get_redis()
+        await r.set("gemini:selectors", selector_manager.current.model_dump_json())
+        
+        logging.info(f"✅ Updated selector '{selector_name}' and saved to Redis.")
+        return GenericResponse(status="success", message=f"Selector '{selector_name}' updated.")
+        
+    except Exception as e:
+        logging.error(f"Error updating selector: {e}")
+        return GenericResponse(status="error", message=str(e))
 
 async def execute_get_gemini_task_status(
     request_id: str, offset: int = 0, max_chars: int = 100000

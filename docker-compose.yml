@@ -33,4 +33,4 @@ volumes:
     driver_opts:
       o: bind
       type: none
-      device: /home/user/Documentos/Github/gemini-web-mcp/screenshots_host_access
+      device: ./screenshots_host_access

@@ -34,6 +34,7 @@ redis_client: redis.Redis = None
 # Mapping of active request_ids to the session they are running on (for status checks)
 active_task_sessions: Dict[str, GeminiPageActions] = {}
 
+
 async def get_redis() -> redis.Redis:
     """Get or initialize Redis client"""
     global redis_client
@@ -47,12 +48,16 @@ async def get_redis() -> redis.Redis:
                 logging.info("Loading selectors from Redis cache...")
                 selector_manager.update_from_dict(json.loads(stored_selectors))
             else:
-                logging.info("No selectors in Redis, using default config and caching it...")
+                logging.info(
+                    "No selectors in Redis, using default config and caching it..."
+                )
                 # Cache current defaults to Redis
-                await redis_client.set("gemini:selectors", selector_manager.current.model_dump_json())
+                await redis_client.set(
+                    "gemini:selectors", selector_manager.current.model_dump_json()
+                )
         except Exception as e:
             logging.error(f"Failed to sync selectors with Redis: {e}")
-            
+
     return redis_client
 
 
@@ -120,7 +125,9 @@ class TaskResponse(BaseModel):
 class StatusRequest(BaseModel):
     """Request model for checking task status."""
 
-    request_id: str = Field(..., description="The unique ID of the task request to check.")
+    request_id: str = Field(
+        ..., description="The unique ID of the task request to check."
+    )
     offset: int = Field(
         0, description="Character offset for the result text (useful for pagination)."
     )
@@ -152,7 +159,9 @@ class ScreenshotResponse(BaseModel):
     """Response model for screenshot capture."""
 
     status: str = Field(..., description="Overall status of the operation")
-    screenshot_path: str | None = Field(None, description="Absolute path to the saved screenshot")
+    screenshot_path: str | None = Field(
+        None, description="Absolute path to the saved screenshot"
+    )
     message: str | None = Field(None, description="Detailed message or error info")
 
 
@@ -160,10 +169,16 @@ class SessionStatusResponse(BaseModel):
     """Response model for session status check."""
 
     status: str = Field(..., description="Overall status ('success' or 'error')")
-    authenticated: bool = Field(False, description="Whether the user is currently logged in")
-    page_loaded: bool = Field(False, description="Whether the Gemini page is loaded and interactive")
+    authenticated: bool = Field(
+        False, description="Whether the user is currently logged in"
+    )
+    page_loaded: bool = Field(
+        False, description="Whether the Gemini page is loaded and interactive"
+    )
     url: str = Field(..., description="Current browser URL")
-    details: str | None = Field(None, description="Additional details about the session state")
+    details: str | None = Field(
+        None, description="Additional details about the session state"
+    )
 
 
 class ChatItem(BaseModel):
@@ -177,7 +192,9 @@ class ChatListResponse(BaseModel):
     """Response model for listing chats."""
 
     status: str = Field(..., description="Overall status of the operation")
-    chats: List[ChatItem] = Field(default_factory=list, description="List of recent chats")
+    chats: List[ChatItem] = Field(
+        default_factory=list, description="List of recent chats"
+    )
     message: str | None = Field(None, description="Detailed message or error info")
 
 
@@ -206,22 +223,26 @@ async def execute_tasks_workflow(
         logging.info("🧠 CHAT MGMT: Acquiring shared MAIN session...")
         gemini_actions = await session_manager.get_main_session()
 
-    logging.info(f"🧠 CHAT MGMT: Session acquired. Current URL: {gemini_actions.page.url if gemini_actions.page else 'N/A'}")
+    logging.info(
+        f"🧠 CHAT MGMT: Session acquired. Current URL: {gemini_actions.page.url if gemini_actions.page else 'N/A'}"
+    )
 
     # AUTO-AUTH CHECK
     try:
         logging.info("Checking session authentication status...")
         auth_status = await gemini_actions.check_session_status()
         if not auth_status.get("authenticated", False):
-            logging.warning("⚠️ Session unauthenticated or expired. Initiating auto-refresh...")
-            
+            logging.warning(
+                "⚠️ Session unauthenticated or expired. Initiating auto-refresh..."
+            )
+
             # Release the stale session before refreshing (prevents leaks)
             if new_chat:
                 await session_manager.release_session(gemini_actions)
-            
+
             # Run the auth refresh tool
             refresh_result = await refresh_gemini_auth()
-            
+
             if refresh_result.status == "success":
                 logging.info("✅ Auto-refresh successful. Re-acquiring session...")
                 # Re-acquire session from fresh context
@@ -238,7 +259,6 @@ async def execute_tasks_workflow(
         logging.error(f"Error during auto-auth check: {e}")
         # Proceeding despite error
 
-
     screenshot_manager = gemini_actions.screenshot_manager
 
     # Register active session
@@ -249,7 +269,9 @@ async def execute_tasks_workflow(
     async with gemini_actions.execution_lock:
         try:
             # Create tasks from descriptions
-            tasks = [Task(description=desc, completed=False) for desc in task_descriptions]
+            tasks = [
+                Task(description=desc, completed=False) for desc in task_descriptions
+            ]
 
             if not request_id:
                 request_id = str(uuid.uuid4())
@@ -267,7 +289,9 @@ async def execute_tasks_workflow(
                     request_id=request_id,
                 )
                 await r.setex(
-                    f"gemini:response:{request_id}", 86400, initial_response.model_dump_json()
+                    f"gemini:response:{request_id}",
+                    86400,
+                    initial_response.model_dump_json(),
                 )
                 logging.info(f"✅ Task initialized in Redis with ID: {request_id}")
             except Exception as e:
@@ -277,7 +301,9 @@ async def execute_tasks_workflow(
             results = []
             current_state = initial_state
 
-            logging.info(f"\n🧠 CHAT MGMT: Starting workflow with {len(tasks)} tasks...")
+            logging.info(
+                f"\n🧠 CHAT MGMT: Starting workflow with {len(tasks)} tasks..."
+            )
             if tool:
                 logging.info(f"🧠 CHAT MGMT: Using tool: {tool}")
 
@@ -298,7 +324,9 @@ async def execute_tasks_workflow(
                 try:
                     await gemini_actions.ensure_reasoning_mode()
                 except Exception as e:
-                    logging.error(f"❌ Failed to ensure Reasoning mode after retries: {e}")
+                    logging.error(
+                        f"❌ Failed to ensure Reasoning mode after retries: {e}"
+                    )
                     if screenshot_manager:
                         await screenshot_manager.capture_error(
                             gemini_actions.page, "ensure_reasoning_mode_workflow", e
@@ -310,7 +338,9 @@ async def execute_tasks_workflow(
                     try:
                         await gemini_actions.select_tool(tool)
                     except Exception as e:
-                        logging.error(f"❌ Failed to select tool '{tool}' after retries: {e}")
+                        logging.error(
+                            f"❌ Failed to select tool '{tool}' after retries: {e}"
+                        )
                         if screenshot_manager:
                             await screenshot_manager.capture_error(
                                 gemini_actions.page, f"select_tool_{tool}_workflow", e
@@ -355,7 +385,9 @@ async def execute_tasks_workflow(
                         # Wait for the current generation to finish
                         # Use a very long timeout (30 mins) specifically for Deep Research cases
                         wait_timeout = (
-                            1800000 if tool and tool.lower() == "deep_research" else 300000
+                            1800000
+                            if tool and tool.lower() == "deep_research"
+                            else 300000
                         )
                         (
                             success,
@@ -365,7 +397,9 @@ async def execute_tasks_workflow(
                         )
 
                         if success:
-                            logging.info("✓ Ongoing generation finished. Retrieving result.")
+                            logging.info(
+                                "✓ Ongoing generation finished. Retrieving result."
+                            )
                             skipped_prompt = True
                         else:
                             logging.warning(
@@ -395,7 +429,9 @@ async def execute_tasks_workflow(
                             )
                             if screenshot_manager:
                                 await screenshot_manager.capture_error(
-                                    gemini_actions.page, "deep_research_plan_workflow", dr_error
+                                    gemini_actions.page,
+                                    "deep_research_plan_workflow",
+                                    dr_error,
                                 )
                             # Return error for Deep Research failures
                             return TaskResponse(
@@ -409,7 +445,10 @@ async def execute_tasks_workflow(
                                         description=task.description,
                                         status="error",
                                         error=str(dr_error),
-                                        metadata={"tool": tool, "phase": "deep_research_plan"},
+                                        metadata={
+                                            "tool": tool,
+                                            "phase": "deep_research_plan",
+                                        },
                                     )
                                 ],
                             )
@@ -435,7 +474,9 @@ async def execute_tasks_workflow(
                             metadata={"tool": tool, "skipped_prompt": skipped_prompt},
                         )
                     )
-                    logging.info(f"✅ TASK COMPLETED: {task.description}\nURL: {gemini_actions.page.url}\nRESULT:\n{response_text[:400]}...")
+                    logging.info(
+                        f"✅ TASK COMPLETED: {task.description}\nURL: {gemini_actions.page.url}\nRESULT:\n{response_text[:400]}..."
+                    )
 
                     current_state["tasks"][task_index] = task
                     current_state["current_task_index"] += 1
@@ -479,7 +520,9 @@ async def execute_tasks_workflow(
                     request_id=request_id,
                 )
                 await r.setex(
-                    f"gemini:response:{request_id}", 86400, response_model.model_dump_json()
+                    f"gemini:response:{request_id}",
+                    86400,
+                    response_model.model_dump_json(),
                 )
                 logging.info(f"✅ Final response saved to Redis with ID: {request_id}")
             except Exception as e:
@@ -509,7 +552,7 @@ async def execute_tasks_workflow(
             # Cleanup
             if request_id and request_id in active_task_sessions:
                 del active_task_sessions[request_id]
-            
+
             # Release session if it's a worker (new_chat=True)
             # Main session (new_chat=False) is kept active
             if new_chat:
@@ -638,12 +681,11 @@ async def refresh_gemini_auth() -> GenericResponse:
         GenericResponse indicating success or failure.
     """
     logging.info("♻️ Refreshing Gemini authentication...")
-    
+
     script_path = Path("./run_auth_remote.sh").resolve()
     if not script_path.exists():
         return GenericResponse(
-            status="error", 
-            message=f"Auth script not found at {script_path}"
+            status="error", message=f"Auth script not found at {script_path}"
         )
 
     try:
@@ -652,30 +694,30 @@ async def refresh_gemini_auth() -> GenericResponse:
             str(script_path),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            cwd=str(script_path.parent)
+            cwd=str(script_path.parent),
         )
 
         stdout, stderr = await process.communicate()
-        
+
         stdout_str = stdout.decode().strip()
         stderr_str = stderr.decode().strip()
 
         if process.returncode == 0:
             logging.info("✅ Auth refresh successful.")
-            
+
             # Reload the browser contexts
             global session_manager
             await session_manager.reload_auth()
-            
+
             return GenericResponse(
-                status="success", 
-                message=f"Authentication refreshed successfully.\nLogs:\n{stdout_str}"
+                status="success",
+                message=f"Authentication refreshed successfully.\nLogs:\n{stdout_str}",
             )
         else:
             logging.error(f"❌ Auth refresh failed: {stderr_str}")
             return GenericResponse(
-                status="error", 
-                message=f"Authentication refresh failed (Code {process.returncode}).\nError:\n{stderr_str}\n\nOutput:\n{stdout_str}\n\nIf this persists, please perform manual authentication."
+                status="error",
+                message=f"Authentication refresh failed (Code {process.returncode}).\nError:\n{stderr_str}\n\nOutput:\n{stdout_str}\n\nIf this persists, please perform manual authentication.",
             )
 
     except Exception as e:
@@ -699,11 +741,15 @@ async def take_gemini_screenshot(name: str = "manual_capture") -> ScreenshotResp
         ScreenshotResponse containing the status and the absolute path to the image.
     """
     global session_manager
-    
+
     try:
         session = await session_manager.get_main_session()
         path = await session.take_screenshot(name)
-        return ScreenshotResponse(status="success", screenshot_path=path, message="Screenshot captured successfully.")
+        return ScreenshotResponse(
+            status="success",
+            screenshot_path=path,
+            message="Screenshot captured successfully.",
+        )
     except Exception as e:
         logging.error(f"Error capturing screenshot: {e}")
         return ScreenshotResponse(status="error", message=str(e))
@@ -730,7 +776,7 @@ async def get_gemini_session_status() -> SessionStatusResponse:
             authenticated=status_info["authenticated"],
             page_loaded=status_info["page_loaded"],
             url=status_info["url"],
-            details=status_info["details"]
+            details=status_info["details"],
         )
     except Exception as e:
         logging.error(f"Error checking session status: {e}")
@@ -739,7 +785,7 @@ async def get_gemini_session_status() -> SessionStatusResponse:
             authenticated=False,
             page_loaded=False,
             url="Error",
-            details=str(e)
+            details=str(e),
         )
 
 
@@ -758,11 +804,14 @@ async def upload_file_to_gemini(file_path: str) -> GenericResponse:
         GenericResponse indicating success or failure.
     """
     global session_manager
-    
+
     try:
         session = await session_manager.get_main_session()
         await session.upload_file(file_path)
-        return GenericResponse(status="success", message=f"File '{os.path.basename(file_path)}' uploaded successfully.")
+        return GenericResponse(
+            status="success",
+            message=f"File '{os.path.basename(file_path)}' uploaded successfully.",
+        )
     except Exception as e:
         logging.error(f"Error uploading file: {e}")
         return GenericResponse(status="error", message=str(e))
@@ -779,7 +828,7 @@ async def list_gemini_chats() -> ChatListResponse:
         ChatListResponse containing a list of chat titles and URLs.
     """
     global session_manager
-    
+
     try:
         session = await session_manager.get_main_session()
         chats_data = await session.list_chats()
@@ -804,17 +853,42 @@ async def switch_gemini_chat(chat_title: str) -> GenericResponse:
         GenericResponse indicating if the switch was successful.
     """
     global session_manager
-    
+
     try:
         session = await session_manager.get_main_session()
         success = await session.switch_chat(chat_title)
         if success:
-            return GenericResponse(status="success", message=f"Switched to chat: {chat_title}")
+            return GenericResponse(
+                status="success", message=f"Switched to chat: {chat_title}"
+            )
         else:
-            return GenericResponse(status="error", message=f"Chat '{chat_title}' not found.")
+            return GenericResponse(
+                status="error", message=f"Chat '{chat_title}' not found."
+            )
     except Exception as e:
         logging.error(f"Error switching chat: {e}")
         return GenericResponse(status="error", message=str(e))
+
+
+@mcp.tool()
+async def check_gemini_selectors() -> Dict[str, Any]:
+    """
+    Check the health of all Gemini UI selectors.
+
+    Use this tool when you suspect the Gemini interface has changed (e.g., tools fail to click,
+    textarea not found) or as a periodic maintenance task.
+
+    Returns:
+        A report with the status of each critical selector.
+    """
+    global session_manager
+    try:
+        session = await session_manager.get_main_session()
+        result = await session.debug_selectors()
+        return result
+    except Exception as e:
+        logging.error(f"Error checking selectors: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 async def execute_get_gemini_task_status(
@@ -822,7 +896,7 @@ async def execute_get_gemini_task_status(
 ) -> StatusResponse:
     """Implementation of get_gemini_task_status for testing and internal use."""
     global active_task_sessions
-    
+
     try:
         r = await get_redis()
         data = await r.get(f"gemini:response:{request_id}")
@@ -834,11 +908,11 @@ async def execute_get_gemini_task_status(
                 tasks_completed=0,
                 total_tasks=0,
                 results=[],
-                message="Request ID not found in Redis."
+                message="Request ID not found in Redis.",
             )
 
         response = TaskResponse.model_validate_json(data)
-        
+
         # Check active session for generation status
         is_generating = False
         if request_id in active_task_sessions:
@@ -854,9 +928,9 @@ async def execute_get_gemini_task_status(
             is_generating=is_generating,
             tasks_completed=response.tasks_completed,
             total_tasks=response.total_tasks,
-            results=response.results, # Should implement truncation here if needed
+            results=response.results,  # Should implement truncation here if needed
             chat_url=response.chat_url,
-            message=response.message
+            message=response.message,
         )
     except Exception as e:
         logging.error(f"Error retrieving task status: {e}")
@@ -866,7 +940,7 @@ async def execute_get_gemini_task_status(
             tasks_completed=0,
             total_tasks=0,
             results=[],
-            message=str(e)
+            message=str(e),
         )
 
 
@@ -874,10 +948,10 @@ async def execute_get_gemini_task_status(
 async def verify_gemini_selectors() -> Dict[str, Any]:
     """
     Verify the current Gemini selectors against the live web interface.
-    
+
     Use this tool to check if the UI has changed and selectors are broken.
     It returns a report of working and broken selectors.
-    
+
     Returns:
         JSON report with 'status', 'broken_selectors', and 'logs'.
     """
@@ -892,115 +966,49 @@ async def verify_gemini_selectors() -> Dict[str, Any]:
 
 
 @mcp.tool()
-async def update_gemini_selector(selector_name: str, selector_value: Dict[str, Any]) -> GenericResponse:
+async def update_gemini_selector(
+    selector_name: str, selector_value: Dict[str, Any]
+) -> GenericResponse:
     """
     Update a specific selector configuration dynamically.
-    
+
     Use this tool to fix a broken selector found by verification.
     The change is applied immediately and persisted to Redis.
-    
+
     Args:
         selector_name: The name of the selector field (e.g., 'tools_button', 'send_button').
         selector_value: The new configuration dict (e.g., {'primary': '...', 'fallbacks': [...]}).
-        
+
     Returns:
         GenericResponse indicating success.
     """
     try:
         # Get current state
         current_data = selector_manager.current.model_dump()
-        
+
         # Update field
         if selector_name not in current_data:
-             return GenericResponse(status="error", message=f"Selector '{selector_name}' does not exist.")
-             
+            return GenericResponse(
+                status="error", message=f"Selector '{selector_name}' does not exist."
+            )
+
         current_data[selector_name] = selector_value
-        
+
         # Validate/Apply to manager
         selector_manager.update_from_dict(current_data)
-        
+
         # Save to Redis
         r = await get_redis()
         await r.set("gemini:selectors", selector_manager.current.model_dump_json())
-        
+
         logging.info(f"✅ Updated selector '{selector_name}' and saved to Redis.")
-        return GenericResponse(status="success", message=f"Selector '{selector_name}' updated.")
-        
-    except Exception as e:
-        logging.error(f"Error updating selector: {e}")
-        return GenericResponse(status="error", message=str(e))
-
-async def execute_get_gemini_task_status(
-    request_id: str, offset: int = 0, max_chars: int = 100000
-) -> StatusResponse:
-    """Implementation of get_gemini_task_status for testing and internal use."""
-    global active_task_sessions
-    
-    try:
-        r = await get_redis()
-        data = await r.get(f"gemini:response:{request_id}")
-
-        if not data:
-            return StatusResponse(
-                status="not_found",
-                message=f"No task found with ID {request_id}",
-                results=[],
-            )
-
-        task_response = TaskResponse.model_validate_json(data)
-        is_gen = False
-
-        # If it's still processing, check the actual browser state if possible
-        if task_response.status == "processing":
-            # Access the specific session working on this request
-            gemini_actions = active_task_sessions.get(request_id)
-            if gemini_actions:
-                try:
-                    is_gen = await gemini_actions.is_generating()
-                except Exception:
-                    pass
-
-        # Apply offset and max_chars to results
-        processed_results = []
-        for res in task_response.results:
-            new_res = res.model_copy()
-            if new_res.result:
-                full_text = new_res.result
-                text_len = len(full_text)
-
-                if offset < text_len:
-                    end = min(offset + max_chars, text_len)
-                    new_res.result = full_text[offset:end]
-
-                    # Add metadata about truncation
-                    if not new_res.metadata:
-                        new_res.metadata = {}
-                    new_res.metadata["total_length"] = text_len
-                    new_res.metadata["offset"] = offset
-                    new_res.metadata["truncated"] = end < text_len
-                else:
-                    new_res.result = ""
-                    if not new_res.metadata:
-                        new_res.metadata = {}
-                    new_res.metadata["total_length"] = text_len
-                    new_res.metadata["offset"] = offset
-                    new_res.metadata["error"] = "Offset out of bounds"
-
-            processed_results.append(new_res)
-
-        return StatusResponse(
-            status=task_response.status,
-            is_generating=is_gen,
-            tasks_completed=task_response.tasks_completed,
-            total_tasks=task_response.total_tasks,
-            results=processed_results,
-            chat_url=task_response.chat_url,
-            message=task_response.message,
+        return GenericResponse(
+            status="success", message=f"Selector '{selector_name}' updated."
         )
 
     except Exception as e:
-        logging.exception(f"Error checking task status for {request_id}")
-        return StatusResponse(status="error", message=str(e), results=[])
+        logging.error(f"Error updating selector: {e}")
+        return GenericResponse(status="error", message=str(e))
 
 
 @mcp.custom_route("/tasks", methods=["POST"])

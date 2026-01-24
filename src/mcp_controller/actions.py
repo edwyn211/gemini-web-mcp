@@ -1,8 +1,7 @@
 import asyncio
 import logging
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -127,9 +126,13 @@ class GeminiPageActions:
         :param text: The prompt text to send.
         """
         current_url = self.page.url
+<<<<<<< HEAD
         logger.info(
             f"🧠 CHAT MGMT: 👤 SENDING PROMPT in {current_url}: '{text[:100]}...'"
         )
+=======
+        logger.info(f"🧠 CHAT MGMT: 👤 SENDING PROMPT in {current_url}: '{text[:100]}...'")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
 
         try:
             # Wait for the textarea to be available
@@ -159,21 +162,21 @@ class GeminiPageActions:
 
             # waiting for valid state after "paste" and for UI to update (mic -> send)
             await self.page.wait_for_timeout(1500)
-
+            
             # Wait specifically for the send button to become visible
             logger.info("Waiting for send button to appear...")
             try:
+<<<<<<< HEAD
                 send_selectors = selector_manager.current.get_all_selectors(
                     "send_button"
                 )
+=======
+                send_selectors = selector_manager.current.get_all_selectors("send_button")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
                 primary_send = send_selectors[0]
-                await self.page.wait_for_selector(
-                    primary_send, state="visible", timeout=5000
-                )
+                await self.page.wait_for_selector(primary_send, state="visible", timeout=5000)
             except Exception:
-                logger.warning(
-                    "Send button not visible after typing, attempting to click anyway..."
-                )
+                logger.warning("Send button not visible after typing, attempting to click anyway...")
 
             logger.info("Clicking send button...")
             await self._try_selectors("send_button", action="click")
@@ -221,25 +224,44 @@ class GeminiPageActions:
                     return False
 
             # 4. If neither Stop, Send, nor Mic is visible, it might be busy or in an unusual state
+<<<<<<< HEAD
             # additional check for generic progress/busy indicators if available
             busy_indicators = [
                 "mat-progress-bar",
                 ".typing-indicator",
                 "div[role='progressbar']",
+=======
+            # but usually it's considered "generating" if Send/Mic are missing
+            # logger.info("Neither Stop, Send, nor Mic visible - checking for progress indicators...")
+            
+            # Additional check for generic progress/busy indicators if available
+            busy_indicators = [
+                "mat-progress-bar",
+                ".typing-indicator",
+                "div[role='progressbar']"
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
             ]
             for selector in busy_indicators:
                 try:
                     if await self.page.is_visible(selector, timeout=500):
+<<<<<<< HEAD
                         logger.info(
                             f"Generation in progress: Busy indicator '{selector}' visible"
                         )
+=======
+                        logger.info(f"Generation in progress: Busy indicator '{selector}' visible")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
                         return True
                 except Exception:
                     continue
 
+<<<<<<< HEAD
             logger.info(
                 "Neither Stop, Send, nor Mic visible - likely in progress or transitioning"
             )
+=======
+            logger.info("Neither Stop, Send, nor Mic visible - likely in progress or transitioning")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
             return True
         except Exception as e:
             logger.warning(f"Error checking generation status: {e}")
@@ -253,9 +275,13 @@ class GeminiPageActions:
         logger.info("Checking for Canvas content...")
         try:
             # Check if we have a canvas content selector
+<<<<<<< HEAD
             canvas_selectors = selector_manager.current.get_all_selectors(
                 "canvas_content"
             )
+=======
+            canvas_selectors = selector_manager.current.get_all_selectors("canvas_content")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
 
             for selector in canvas_selectors:
                 elements = await self.page.query_selector_all(selector)
@@ -347,9 +373,13 @@ class GeminiPageActions:
             # Check for "Show more" buttons before grabbing text
             try:
                 # Check for explicit "Show more" buttons
+<<<<<<< HEAD
                 show_more_selectors = selector_manager.current.get_all_selectors(
                     "show_more"
                 )
+=======
+                show_more_selectors = selector_manager.current.get_all_selectors("show_more")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
                 for selector in show_more_selectors:
                     try:
                         show_more_btn = await self.page.query_selector(selector)
@@ -363,9 +393,13 @@ class GeminiPageActions:
                 logger.debug(f"Error checking show more buttons: {e}")
 
             # Probar selectores de respuesta normales
+<<<<<<< HEAD
             response_selectors = selector_manager.current.get_all_selectors(
                 "last_response"
             )
+=======
+            response_selectors = selector_manager.current.get_all_selectors("last_response")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
 
             # Get all potential response elements first
             candidates = []
@@ -447,9 +481,13 @@ class GeminiPageActions:
             # Validate that new chat started
             success, details = await self.validator.validate_chat_started(timeout=5000)
             if success:
+<<<<<<< HEAD
                 logger.info(
                     f"🧠 CHAT MGMT: ✓ New chat started and validated. URL: {self.page.url}"
                 )
+=======
+                logger.info(f"🧠 CHAT MGMT: ✓ New chat started and validated. URL: {self.page.url}")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
             else:
                 logger.warning(f"⚠ New chat validation unclear: {details}")
 
@@ -494,7 +532,11 @@ class GeminiPageActions:
 
             # 2. Wait for and click the specific tool
             logger.info(f"Clicking {tool_name} button...")
+<<<<<<< HEAD
 
+=======
+            
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
             # Direct click works for both icons and buttons
             await self._try_selectors(tool_field, action="click", force=True)
 
@@ -507,9 +549,13 @@ class GeminiPageActions:
             if success:
                 logger.info(f"✓ Tool '{tool_name}' selected and validated")
             else:
+<<<<<<< HEAD
                 error_msg = (
                     f"Tool selection validation failed for '{tool_name}': {details}"
                 )
+=======
+                error_msg = f"Tool selection validation failed for '{tool_name}': {details}"
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
                 logger.error(f"✗ {error_msg}")
                 raise Exception(error_msg)
 
@@ -671,7 +717,7 @@ class GeminiPageActions:
     async def take_screenshot(self, name: str = "manual_capture") -> str:
         """
         Captures a screenshot of the current page.
-
+        
         :param name: Base name for the screenshot file
         :return: Absolute path to the saved screenshot
         """
@@ -684,34 +730,31 @@ class GeminiPageActions:
     async def check_session_status(self) -> dict:
         """
         Checks if the current session is valid and authenticated.
-
+        
         :return: Dictionary with status information
         """
         logger.info("Checking session status...")
-
+        
         status = {
             "authenticated": False,
             "page_loaded": False,
             "url": self.page.url,
-            "details": "",
+            "details": ""
         }
-
+        
         try:
             # Check for specific elements similar to diagnostic script
             # 1. Check for prompt textarea (definitive test for "can I chat?")
-            textarea = await self.page.query_selector(
-                "div[contenteditable='true']"
-            ) or await self.page.query_selector("rich-textarea")
-
+            textarea = await self.page.query_selector("div[contenteditable='true']") or \
+                       await self.page.query_selector("rich-textarea")
+            
             if textarea and await textarea.is_visible():
                 status["authenticated"] = True
                 status["page_loaded"] = True
                 status["details"] = "Session active: Prompt input area visible."
             else:
-                # Check for "Se ha cerrado tu sesión" or similar
-                session_ended = await self.page.query_selector(
-                    "h1.mat-mdc-dialog-title"
-                )
+                 # Check for "Se ha cerrado tu sesión" or similar
+                session_ended = await self.page.query_selector("h1.mat-mdc-dialog-title")
                 if session_ended:
                     text = await session_ended.inner_text()
                     status["details"] = f"Session ended dialog detected: {text}"
@@ -720,32 +763,24 @@ class GeminiPageActions:
 
             # 2. Check for User Avatar (Account Verification)
             if status["authenticated"]:
-                account_btn = (
-                    await self.page.query_selector("div[aria-label*='cuenta' i]")
-                    or await self.page.query_selector(
-                        "div[aria-label*='Google Account' i]"
-                    )
-                    or await self.page.query_selector(
-                        "img[src*='googleusercontent.com']"
-                    )
-                    or await self.page.query_selector("a[href*='accounts.google.com']")
-                )
-
+                account_btn = await self.page.query_selector("div[aria-label*='cuenta' i]") or \
+                              await self.page.query_selector("div[aria-label*='Google Account' i]") or \
+                              await self.page.query_selector("img[src*='googleusercontent.com']") or \
+                              await self.page.query_selector("a[href*='accounts.google.com']")
+                
                 if account_btn:
-                    status["details"] += " Account verified (Avatar found)."
+                     status["details"] += " Account verified (Avatar found)."
                 else:
-                    status["details"] += (
-                        " WARNING: Account avatar not found (but chat is visible)."
-                    )
+                     status["details"] += " WARNING: Account avatar not found (but chat is visible)."
 
             # 3. Check for specific URL pattern
             if "/app" in self.page.url:
-                # Standard Gemini App URL
-                pass
+                 # Standard Gemini App URL
+                 pass
             elif "accounts.google.com" in self.page.url:
-                status["authenticated"] = False
-                status["page_loaded"] = False
-                status["details"] = "Redirected to login page."
+                 status["authenticated"] = False
+                 status["page_loaded"] = False
+                 status["details"] = "Redirected to login page."
 
             return status
         except Exception as e:
@@ -756,23 +791,23 @@ class GeminiPageActions:
     async def upload_file(self, file_path: str):
         """
         Uploads a file to the Gemini prompt.
-
+        
         :param file_path: Path to the file to upload
         """
         logger.info(f"Uploading file: {file_path}")
-
+        
         if not Path(file_path).exists():
             raise FileNotFoundError(f"File not found: {file_path}")
-
+            
         try:
             # Try to find the file input
             # Playwright's set_input_files works on hidden inputs as well
             file_input_selectors = [
                 "input[type='file']",
                 "input[accept*='image']",
-                "input[accept*='pdf']",
+                "input[accept*='pdf']"
             ]
-
+            
             success = False
             for selector in file_input_selectors:
                 try:
@@ -784,16 +819,16 @@ class GeminiPageActions:
                     break
                 except Exception:
                     continue
-
+            
             if not success:
                 # Try clicking the plus/attach button first if it exists
                 attach_selectors = [
                     "button[aria-label*='Attach' i]",
                     "button[aria-label*='Adjuntar' i]",
                     "mat-icon[data-mat-icon-name='add_circle']",
-                    "mat-icon[data-mat-icon-name='add']",
+                    "mat-icon[data-mat-icon-name='add']"
                 ]
-
+                
                 for selector in attach_selectors:
                     try:
                         btn = await self.page.query_selector(selector)
@@ -801,23 +836,19 @@ class GeminiPageActions:
                             await btn.click()
                             await self.page.wait_for_timeout(1000)
                             # Try input again after clicking
-                            await self.page.set_input_files(
-                                "input[type='file']", file_path
-                            )
+                            await self.page.set_input_files("input[type='file']", file_path)
                             success = True
-                            logger.info(
-                                f"✓ File uploaded after clicking attach button: {selector}"
-                            )
+                            logger.info(f"✓ File uploaded after clicking attach button: {selector}")
                             break
                     except Exception:
                         continue
-
+            
             if not success:
                 raise Exception("Could not find file input for uploading.")
-
+                
             # Wait for upload to process
             await self.page.wait_for_timeout(3000)
-
+            
         except Exception as e:
             logger.error(f"Error uploading file: {e}")
             await self.screenshot_manager.capture_error(self.page, "upload_file", e)
@@ -826,66 +857,73 @@ class GeminiPageActions:
     async def list_chats(self) -> List[Dict[str, str]]:
         """
         Lists recent chats from the sidebar.
-
+        
         :return: List of dictionaries with 'title' and 'url' (if available)
         """
         logger.info("Listing recent chats...")
-
+        
         chats = []
         history_selectors = [
             "a[href*='/app/']",  # Gemini chat links usually have /app/ in URL
             ".history-item",
             "div[role='link']",
-            "li.conversation-list-item",
+            "li.conversation-list-item"
         ]
-
+        
         for selector in history_selectors:
             try:
                 elements = await self.page.query_selector_all(selector)
                 for el in elements:
                     text = await el.inner_text()
                     href = await el.get_attribute("href")
-
+                    
                     if text and len(text.strip()) > 1:
                         # Clean up text (often has icons/newlines)
-                        clean_title = text.split("\n")[0].strip()
-                        if clean_title and clean_title not in [
-                            c["title"] for c in chats
-                        ]:
-                            chats.append(
-                                {"title": clean_title, "url": href if href else ""}
-                            )
-
+                        clean_title = text.split('\n')[0].strip()
+                        if clean_title and clean_title not in [c["title"] for c in chats]:
+                            chats.append({
+                                "title": clean_title,
+                                "url": href if href else ""
+                            })
+                
                 if chats:
                     break
             except Exception:
                 continue
-
+                
         return chats[:15]  # Limit to 15 recent chats
 
     async def switch_chat(self, chat_title: str) -> bool:
         """
         Switches to a chat with the given title.
-
+        
         :param chat_title: The title of the chat to switch to
         :return: True if successful
         """
         logger.info(f"🧠 CHAT MGMT: Switching to chat: {chat_title}")
+<<<<<<< HEAD
+=======
+        
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
         # Try finding the chat item in the sidebar
         try:
             # Use text selector for the chat title
             chat_selector = f"text='{chat_title}'"
             chat_item = await self.page.query_selector(chat_selector)
-
+            
             if chat_item:
                 await chat_item.click()
                 await self.page.wait_for_load_state("domcontentloaded")
                 await self.page.wait_for_timeout(2000)
+<<<<<<< HEAD
                 logger.info(
                     f"🧠 CHAT MGMT: ✓ Switched to chat: {chat_title}. URL: {self.page.url}"
                 )
+=======
+                logger.info(f"🧠 CHAT MGMT: ✓ Switched to chat: {chat_title}. URL: {self.page.url}")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
                 return True
-
+            
             # Try partial match if exact match fails
             chat_selector = f"xpath=//div[contains(text(), '{chat_title}')] | //a[contains(text(), '{chat_title}')]"
             chat_item = await self.page.query_selector(chat_selector)
@@ -893,18 +931,23 @@ class GeminiPageActions:
                 await chat_item.click()
                 await self.page.wait_for_load_state("domcontentloaded")
                 await self.page.wait_for_timeout(2000)
+<<<<<<< HEAD
                 logger.info(
                     f"🧠 CHAT MGMT: ✓ Switched to chat (partial match): {chat_title}. URL: {self.page.url}"
                 )
+=======
+                logger.info(f"🧠 CHAT MGMT: ✓ Switched to chat (partial match): {chat_title}. URL: {self.page.url}")
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
                 return True
-
+                
             logger.warning(f"Chat '{chat_title}' not found in the list.")
             return False
-
+            
         except Exception as e:
             logger.error(f"Error switching chat: {e}")
             await self.screenshot_manager.capture_error(self.page, "switch_chat", e)
             return False
+<<<<<<< HEAD
 
     async def debug_selectors(self) -> Dict[str, Any]:
         """
@@ -971,3 +1014,5 @@ class GeminiPageActions:
         await self.take_screenshot("selector_health_check")
 
         return report
+=======
+>>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)

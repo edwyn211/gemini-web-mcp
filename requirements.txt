@@ -4,5 +4,3 @@ pydantic
 python-dotenv
 fastmcp
 redis
-pytest
-pytest-asyncio

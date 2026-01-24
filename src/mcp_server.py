@@ -47,7 +47,6 @@ async def get_redis() -> redis.Redis:
                 logging.info("Loading selectors from Redis cache...")
                 selector_manager.update_from_dict(json.loads(stored_selectors))
             else:
-<<<<<<< HEAD
                 logging.info(
                     "No selectors in Redis, using default config and caching it..."
                 )
@@ -58,14 +57,6 @@ async def get_redis() -> redis.Redis:
         except Exception as e:
             logging.error(f"Failed to sync selectors with Redis: {e}")
 
-=======
-                logging.info("No selectors in Redis, using default config and caching it...")
-                # Cache current defaults to Redis
-                await redis_client.set("gemini:selectors", selector_manager.current.model_dump_json())
-        except Exception as e:
-            logging.error(f"Failed to sync selectors with Redis: {e}")
-            
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
     return redis_client
 
 
@@ -219,20 +210,16 @@ async def execute_tasks_workflow(
         logging.info("🧠 CHAT MGMT: Acquiring shared MAIN session...")
         gemini_actions = await session_manager.get_main_session()
 
-<<<<<<< HEAD
     logging.info(
         f"🧠 CHAT MGMT: Session acquired. Current URL: {gemini_actions.page.url if gemini_actions.page else 'N/A'}"
     )
-=======
-    logging.info(f"🧠 CHAT MGMT: Session acquired. Current URL: {gemini_actions.page.url if gemini_actions.page else 'N/A'}")
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
 
     # AUTO-AUTH CHECK
     try:
         logging.info("Checking session authentication status...")
         auth_status = await gemini_actions.check_session_status()
         if not auth_status.get("authenticated", False):
-<<<<<<< HEAD
             logging.warning(
                 "⚠️ Session unauthenticated or expired. Initiating auto-refresh..."
             )
@@ -244,17 +231,6 @@ async def execute_tasks_workflow(
             # Run the auth refresh tool
             refresh_result = await refresh_gemini_auth()
 
-=======
-            logging.warning("⚠️ Session unauthenticated or expired. Initiating auto-refresh...")
-            
-            # Release the stale session before refreshing (prevents leaks)
-            if new_chat:
-                await session_manager.release_session(gemini_actions)
-            
-            # Run the auth refresh tool
-            refresh_result = await refresh_gemini_auth()
-            
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
             if refresh_result.status == "success":
                 logging.info("✅ Auto-refresh successful. Re-acquiring session...")
                 # Re-acquire session from fresh context
@@ -285,13 +261,10 @@ async def execute_tasks_workflow(
     async with gemini_actions.execution_lock:
         try:
             # Create tasks from descriptions
-<<<<<<< HEAD
             tasks = [
                 Task(description=desc, completed=False) for desc in task_descriptions
             ]
-=======
-            tasks = [Task(description=desc, completed=False) for desc in task_descriptions]
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
 
             if not request_id:
                 request_id = str(uuid.uuid4())
@@ -309,13 +282,10 @@ async def execute_tasks_workflow(
                     request_id=request_id,
                 )
                 await r.setex(
-<<<<<<< HEAD
                     f"gemini:response:{request_id}",
                     86400,
                     initial_response.model_dump_json(),
-=======
-                    f"gemini:response:{request_id}", 86400, initial_response.model_dump_json()
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
                 )
                 logging.info(f"✅ Task initialized in Redis with ID: {request_id}")
             except Exception as e:
@@ -325,13 +295,10 @@ async def execute_tasks_workflow(
             results = []
             current_state = initial_state
 
-<<<<<<< HEAD
             logging.info(
                 f"\n🧠 CHAT MGMT: Starting workflow with {len(tasks)} tasks..."
             )
-=======
-            logging.info(f"\n🧠 CHAT MGMT: Starting workflow with {len(tasks)} tasks...")
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
             if tool:
                 logging.info(f"🧠 CHAT MGMT: Using tool: {tool}")
 
@@ -340,29 +307,6 @@ async def execute_tasks_workflow(
                 try:
                     await gemini_actions.start_new_chat()
                     await asyncio.sleep(2)  # Wait for new chat to load
-<<<<<<< HEAD
-                except Exception as e:
-                    logging.error(f"❌ Failed to start new chat after retries: {e}")
-                    if screenshot_manager:
-                        await screenshot_manager.capture_error(
-                            gemini_actions.page, "start_new_chat_workflow", e
-                        )
-                    # Continue anyway, might still work
-
-                # Step 0: Ensure Reasoning mode is active (with retries built-in)
-                try:
-                    await gemini_actions.ensure_reasoning_mode()
-                except Exception as e:
-                    logging.error(
-                        f"❌ Failed to ensure Reasoning mode after retries: {e}"
-                    )
-                    if screenshot_manager:
-                        await screenshot_manager.capture_error(
-                            gemini_actions.page, "ensure_reasoning_mode_workflow", e
-                        )
-                    # Continue anyway, might still work in current mode
-
-=======
                 except Exception as e:
                     logging.error(f"❌ Failed to start new chat after retries: {e}")
                     if screenshot_manager:
@@ -382,19 +326,15 @@ async def execute_tasks_workflow(
                         )
                     # Continue anyway, might still work in current mode
 
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
                 # Step 1: Select tool if specified (with retries built-in)
                 if tool:
                     try:
                         await gemini_actions.select_tool(tool)
                     except Exception as e:
-<<<<<<< HEAD
                         logging.error(
                             f"❌ Failed to select tool '{tool}' after retries: {e}"
                         )
-=======
-                        logging.error(f"❌ Failed to select tool '{tool}' after retries: {e}")
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
                         if screenshot_manager:
                             await screenshot_manager.capture_error(
                                 gemini_actions.page, f"select_tool_{tool}_workflow", e
@@ -439,13 +379,10 @@ async def execute_tasks_workflow(
                         # Wait for the current generation to finish
                         # Use a very long timeout (30 mins) specifically for Deep Research cases
                         wait_timeout = (
-<<<<<<< HEAD
                             1800000
                             if tool and tool.lower() == "deep_research"
                             else 300000
-=======
-                            1800000 if tool and tool.lower() == "deep_research" else 300000
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
                         )
                         (
                             success,
@@ -455,13 +392,10 @@ async def execute_tasks_workflow(
                         )
 
                         if success:
-<<<<<<< HEAD
                             logging.info(
                                 "✓ Ongoing generation finished. Retrieving result."
                             )
-=======
-                            logging.info("✓ Ongoing generation finished. Retrieving result.")
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
                             skipped_prompt = True
                         else:
                             logging.warning(
@@ -491,13 +425,10 @@ async def execute_tasks_workflow(
                             )
                             if screenshot_manager:
                                 await screenshot_manager.capture_error(
-<<<<<<< HEAD
                                     gemini_actions.page,
                                     "deep_research_plan_workflow",
                                     dr_error,
-=======
-                                    gemini_actions.page, "deep_research_plan_workflow", dr_error
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
                                 )
                             # Return error for Deep Research failures
                             return TaskResponse(
@@ -511,14 +442,11 @@ async def execute_tasks_workflow(
                                         description=task.description,
                                         status="error",
                                         error=str(dr_error),
-<<<<<<< HEAD
                                         metadata={
                                             "tool": tool,
                                             "phase": "deep_research_plan",
                                         },
-=======
-                                        metadata={"tool": tool, "phase": "deep_research_plan"},
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
                                     )
                                 ],
                             )
@@ -544,13 +472,8 @@ async def execute_tasks_workflow(
                             metadata={"tool": tool, "skipped_prompt": skipped_prompt},
                         )
                     )
-<<<<<<< HEAD
-                    logging.info(
-                        f"✅ TASK COMPLETED: {task.description}\nURL: {gemini_actions.page.url}\nRESULT:\n{response_text[:400]}..."
-                    )
-=======
-                    logging.info(f"✅ TASK COMPLETED: {task.description}\nURL: {gemini_actions.page.url}\nRESULT:\n{response_text[:400]}...")
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+                    logging.info(f"✅ TASK COMPLETED: {task.description}\nURL: {gemini_actions.page.url}\nRESULT:\n{response_text}")
+
 
                     current_state["tasks"][task_index] = task
                     current_state["current_task_index"] += 1
@@ -594,13 +517,10 @@ async def execute_tasks_workflow(
                     request_id=request_id,
                 )
                 await r.setex(
-<<<<<<< HEAD
                     f"gemini:response:{request_id}",
                     86400,
                     response_model.model_dump_json(),
-=======
-                    f"gemini:response:{request_id}", 86400, response_model.model_dump_json()
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
                 )
                 logging.info(f"✅ Final response saved to Redis with ID: {request_id}")
             except Exception as e:
@@ -630,11 +550,8 @@ async def execute_tasks_workflow(
             # Cleanup
             if request_id and request_id in active_task_sessions:
                 del active_task_sessions[request_id]
-<<<<<<< HEAD
-
-=======
             
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
+
             # Release session if it's a worker (new_chat=True)
             # Main session (new_chat=False) is kept active
             if new_chat:

@@ -24,3 +24,5 @@ screenshots/
 
 .playwright-mcp/
 debug_output/
+
+screenshots_host_access/*

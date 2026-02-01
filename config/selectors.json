@@ -11,7 +11,7 @@
       "[aria-label*='New chat' i]",
       "button:has(mat-icon[data-mat-icon-name='edit_square'])"
     ],
-    "validator": "rich-textarea .ql-editor.ql-blank"
+    "validator": "rich-textarea .ql-editor.ql-blank, rich-textarea .ql-editor[contenteditable='true']:empty"
   },
   "prompt_textarea": {
     "primary": "rich-textarea .ql-editor[contenteditable='true'][role='textbox']",
@@ -42,7 +42,7 @@
     ]
   },
   "mode_selector": {
-    "primary": "button:has-text('Razonamiento')",
+    "primary": "div.logo-pill-label-container, button:has-text('Razonamiento'), button:has-text('Thinking'), button:has-text('Gemini')",
     "fallbacks": [
       "role=button[name*='Gemini']",
       "button:has-text('Gemini')",
@@ -52,8 +52,8 @@
       "div:has(mat-icon[data-mat-icon-name='keyboard_arrow_down'])"
     ],
     "dropdown_icon": "mat-icon[data-mat-icon-name='keyboard_arrow_down']",
-    "reasoning_option": "menuitem:has-text('Razonamiento')",
-    "validator": "button:has-text('Razonamiento')"
+    "reasoning_option": "menuitem:has-text('Razonamiento'), [role='menuitem']:has-text('Thinking'), mat-menu-item:has-text('Thinking'), .mat-mdc-menu-item:has-text('Thinking')",
+    "validator": "button:has-text('Razonamiento'), button:has-text('Thinking')"
   },
   "canvas_button": {
     "primary": "button.toolbox-drawer-item-list-button mat-icon[data-mat-icon-name='note_stack_add']",
@@ -66,7 +66,7 @@
       "button:has(mat-icon[data-mat-icon-name='description'])",
       "mat-icon[data-mat-icon-name='description']"
     ],
-    "validator": "button.toolbox-drawer-item-deselect-button:has-text('Canvas'), toolbox-drawer button:has-text('Canvas'), .pill-container button:has-text('Canvas')"
+    "validator": "button.toolbox-drawer-item-deselect-button:has-text('Canvas'), toolbox-drawer button:has-text('Canvas'), .pill-container button:has-text('Canvas'), button[aria-label*='Canvas' i]"
   },
   "deep_research_button": {
     "primary": "[role='group'] button:has-text('Deep Research')",

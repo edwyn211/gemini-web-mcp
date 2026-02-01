@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from fastmcp import FastMCP
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from starlette.responses import JSONResponse
 import os
 import redis.asyncio as redis
@@ -65,6 +65,8 @@ class TaskRequest(BaseModel):
 
     tasks: List[str] = Field(
         ...,
+        min_length=1,
+        max_length=10,
         description="List of task descriptions to execute sequentially. Each task is processed after the previous one completes.",
         examples=[["Summarize the latest AI news", "Draft a LinkedIn post about it"]],
     )
@@ -77,6 +79,32 @@ class TaskRequest(BaseModel):
         True,
         description="Whether to start a new chat session. Set to False to continue/monitor an existing session (e.g., waiting for Deep Research to finish).",
     )
+
+    @field_validator('tasks')
+    @classmethod
+    def validate_tasks(cls, v: List[str]) -> List[str]:
+        """Validate each task is not empty and within size limits."""
+        validated = []
+        for i, task in enumerate(v):
+            task = task.strip()
+            if not task:
+                raise ValueError(f"Task {i} is empty")
+            if len(task) > 50000:
+                raise ValueError(f"Task {i} exceeds maximum length of 50000 characters")
+            validated.append(task)
+        return validated
+
+    @field_validator('tool')
+    @classmethod
+    def validate_tool(cls, v: str | None) -> str | None:
+        """Validate tool is one of the allowed values."""
+        if v is None:
+            return v
+        allowed_tools = {'canvas', 'deep_research'}
+        v_lower = v.lower()
+        if v_lower not in allowed_tools:
+            raise ValueError(f"Invalid tool '{v}'. Allowed: {allowed_tools}")
+        return v_lower
 
 
 class TaskResult(BaseModel):
@@ -247,10 +275,6 @@ async def execute_tasks_workflow(
         logging.error(f"Error during auto-auth check: {e}")
         # Proceeding despite error
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 1e9f37b (feat: complete quality audit and implement selector health checks and orchestrator logic)
     screenshot_manager = gemini_actions.screenshot_manager
 
     # Register active session
@@ -971,126 +995,6 @@ async def update_gemini_selector(selector_name: str, selector_value: Dict[str, A
     except Exception as e:
         logging.error(f"Error updating selector: {e}")
         return GenericResponse(status="error", message=str(e))
-
-async def execute_get_gemini_task_status(
-    request_id: str, offset: int = 0, max_chars: int = 100000
-) -> StatusResponse:
-    """Implementation of get_gemini_task_status for testing and internal use."""
-    global active_task_sessions
-    
-    try:
-        r = await get_redis()
-        data = await r.get(f"gemini:response:{request_id}")
-
-        if not data:
-            return StatusResponse(
-                status="not_found",
-                is_generating=False,
-                tasks_completed=0,
-                total_tasks=0,
-                results=[],
-                message="Request ID not found in Redis.",
-            )
-
-        response = TaskResponse.model_validate_json(data)
-
-        # Check active session for generation status
-        is_generating = False
-        if request_id in active_task_sessions:
-            try:
-                is_generating = await active_task_sessions[request_id].is_generating()
-            except Exception:
-                pass
-
-        # Apply offset and limit to results
-        # ... logic ...
-        return StatusResponse(
-            status=response.status,
-            is_generating=is_generating,
-            tasks_completed=response.tasks_completed,
-            total_tasks=response.total_tasks,
-            results=response.results,  # Should implement truncation here if needed
-            chat_url=response.chat_url,
-            message=response.message,
-        )
-    except Exception as e:
-        logging.error(f"Error retrieving task status: {e}")
-        return StatusResponse(
-            status="error",
-            is_generating=False,
-            tasks_completed=0,
-            total_tasks=0,
-            results=[],
-            message=str(e),
-        )
-
-
-@mcp.tool()
-async def verify_gemini_selectors() -> Dict[str, Any]:
-    """
-    Verify the current Gemini selectors against the live web interface.
-
-    Use this tool to check if the UI has changed and selectors are broken.
-    It returns a report of working and broken selectors.
-
-    Returns:
-        JSON report with 'status', 'broken_selectors', and 'logs'.
-    """
-    global session_manager
-    validator = SelectorValidator(session_manager)
-    try:
-        report = await validator.validate_all()
-        return report
-    except Exception as e:
-        logging.error(f"Error verifying selectors: {e}")
-        return {"status": "error", "message": str(e)}
-
-
-@mcp.tool()
-async def update_gemini_selector(
-    selector_name: str, selector_value: Dict[str, Any]
-) -> GenericResponse:
-    """
-    Update a specific selector configuration dynamically.
-
-    Use this tool to fix a broken selector found by verification.
-    The change is applied immediately and persisted to Redis.
-
-    Args:
-        selector_name: The name of the selector field (e.g., 'tools_button', 'send_button').
-        selector_value: The new configuration dict (e.g., {'primary': '...', 'fallbacks': [...]}).
-
-    Returns:
-        GenericResponse indicating success.
-    """
-    try:
-        # Get current state
-        current_data = selector_manager.current.model_dump()
-
-        # Update field
-        if selector_name not in current_data:
-            return GenericResponse(
-                status="error", message=f"Selector '{selector_name}' does not exist."
-            )
-
-        current_data[selector_name] = selector_value
-
-        # Validate/Apply to manager
-        selector_manager.update_from_dict(current_data)
-
-        # Save to Redis
-        r = await get_redis()
-        await r.set("gemini:selectors", selector_manager.current.model_dump_json())
-
-        logging.info(f"✅ Updated selector '{selector_name}' and saved to Redis.")
-        return GenericResponse(
-            status="success", message=f"Selector '{selector_name}' updated."
-        )
-
-    except Exception as e:
-        logging.error(f"Error updating selector: {e}")
-        return GenericResponse(status="error", message=str(e))
-
 
 @mcp.custom_route("/tasks", methods=["POST"])
 async def create_tasks_endpoint(request):

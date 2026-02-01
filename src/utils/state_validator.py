@@ -99,15 +99,39 @@ class StateValidator:
             if mode_element:
                 current_mode = await mode_element.inner_text()
 
-                if expected_mode.lower() in current_mode.lower():
+                current_mode_lower = current_mode.lower()
+                expected_mode_lower = expected_mode.lower()
+
+                # synonyms/translations for common modes
+                mode_groups = {
+                    "reasoning": ["reasoning", "razonamiento", "thinking"],
+                    "fast": ["fast", "rápido", "flash"],
+                    "pro": ["pro", "avanzado"],
+                }
+
+                # Find which group the expected mode belongs to
+                target_group = []
+                for group, members in mode_groups.items():
+                    if expected_mode_lower in members:
+                        target_group = members
+                        break
+
+                if not target_group:
+                    target_group = [expected_mode_lower]
+
+                # Check if current mode matches any member of the group
+                is_match = any(m in current_mode_lower for m in target_group)
+
+                if is_match:
                     logger.info(f"✓ Mode validated: {current_mode}")
                     return True, {
                         "current_mode": current_mode,
                         "expected_mode": expected_mode,
+                        "group_match": True,
                     }
                 else:
                     logger.warning(
-                        f"✗ Mode mismatch: expected '{expected_mode}', got '{current_mode}'"
+                        f"✗ Mode mismatch: expected '{expected_mode}' (or synonyms), got '{current_mode}'"
                     )
                     return False, {
                         "current_mode": current_mode,
@@ -331,7 +355,7 @@ class StateValidator:
                 # Y tampoco el botón de micrófono (ambos ausentes suele significar actividad)
                 send_button = await self.page.query_selector(send_button_selector)
                 mic_button = await self.page.query_selector(mic_button_selector)
-                
+
                 send_visible = send_button and await send_button.is_visible()
                 mic_visible = mic_button and await mic_button.is_visible()
 
@@ -370,10 +394,14 @@ class StateValidator:
                 await self.page.wait_for_selector(
                     idle_selector, state="visible", timeout=60000
                 )
-                logger.info("✓ Generación completa: Botón de estado inactivo detectado (enviar o micro)")
+                logger.info(
+                    "✓ Generación completa: Botón de estado inactivo detectado (enviar o micro)"
+                )
                 return True, {"status": "complete"}
             except Exception as e:
-                logger.error(f"✗ Ningún botón de estado inactivo (enviar/micro) reapareció: {e}")
+                logger.error(
+                    f"✗ Ningún botón de estado inactivo (enviar/micro) reapareció: {e}"
+                )
                 return False, {
                     "status": "error",
                     "error": f"El botón de estado inactivo no reapareció: {str(e)}",

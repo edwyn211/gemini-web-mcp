@@ -26,3 +26,8 @@ screenshots/
 debug_output/
 
 screenshots_host_access/*
+# ByteRover
+.brv/
+.agentMemory/
+AUDIT_REPORT.md
+requirements-dev.txt

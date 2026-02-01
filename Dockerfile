@@ -41,4 +41,4 @@ HEALTHCHECK --interval=30s --timeout=3s \
   CMD python3 -c 'import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect(("localhost", 8000))' || exit 1
 
 # Set the command to run the MCP server
-CMD ["fastmcp", "run", "src/mcp_server.py", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["fastmcp", "run", "--transport", "http", "--host", "0.0.0.0", "--port", "8000", "src/mcp_server.py"]

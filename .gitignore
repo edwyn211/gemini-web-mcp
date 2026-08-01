@@ -10,6 +10,8 @@ venv/
 
 # Secretos y sesiones - NUNCA subir al repositorio
 auth_state.json
+auth_state.encrypted
+.auth_salt
 profiles/
 .env
 .env.local

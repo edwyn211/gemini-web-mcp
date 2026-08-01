@@ -20,7 +20,8 @@ def get_formatted_timestamp():
         7: "julio", 8: "agosto", 9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre"
     }
     now = datetime.now()
-    return f"{now.day}_de_{months[now.month]}_del_{now.year}_{now.strftime('%H:%M')}_hrs"
+    # Use '-' instead of ':' so filenames are valid on Windows
+    return f"{now.day}_de_{months[now.month]}_del_{now.year}_{now.strftime('%H-%M')}_hrs"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -139,21 +140,28 @@ async def main():
     async with async_playwright() as p:
         # Launch persistent context
         # We use a persistent context so the session is stored in the directory
-        context = await p.chromium.launch_persistent_context(
-            user_data_dir=USER_DATA_DIR,
-            headless=args.headless,
-            channel="chrome",  # Try to use system Chrome
-            args=[
+        # In headed mode, let the page use the real (maximized) window size;
+        # a fixed viewport makes the UI render small inside the window.
+        context_kwargs = {
+            "user_data_dir": USER_DATA_DIR,
+            "headless": args.headless,
+            "channel": "chrome",  # Try to use system Chrome
+            "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-infobars",
                 "--disable-dev-shm-usage",
                 "--disable-browser-side-navigation",
                 "--disable-gpu",
+                "--start-maximized",
             ],
-            ignore_default_args=["--enable-automation"],
-            viewport={'width': 1920, 'height': 1080}
-        )
+            "ignore_default_args": ["--enable-automation"],
+        }
+        if args.headless:
+            context_kwargs["viewport"] = {'width': 1920, 'height': 1080}
+        else:
+            context_kwargs["no_viewport"] = True
+        context = await p.chromium.launch_persistent_context(**context_kwargs)
         
         # Determine if we should load auth state manually (backup to persistent context)
         if AUTH_STATE_FILE.exists():
@@ -207,6 +215,28 @@ async def main():
             try:
                 logging.info(f"Waiting for main chat interface (timeout: {int(TIMEOUT_NAVIGATION/1000)}s)...")
                 await page.wait_for_selector('rich-textarea', state="visible", timeout=TIMEOUT_NAVIGATION * 3) # Wait longer for load
+
+                # Gemini now shows the chat UI even when logged OUT (anonymous mode),
+                # so rich-textarea alone is not proof of login. Checking for the
+                # ABSENCE of the "Sign in" button is also unreliable (it renders
+                # late). Instead require a POSITIVE marker that only exists when
+                # signed in: the Google Account avatar link. Confirm it twice,
+                # 10s apart, to avoid transient render states.
+                account_marker = "a[aria-label*='Cuenta de Google'], a[aria-label*='Google Account'], a[href*='SignOutOptions']"
+                deadline = asyncio.get_event_loop().time() + (TIMEOUT_NAVIGATION * 3) / 1000
+                confirmations = 0
+                while confirmations < 2:
+                    on_gemini = "gemini.google.com" in page.url
+                    chat_visible = on_gemini and await page.locator("rich-textarea").count() > 0
+                    if chat_visible and await page.locator(account_marker).count() > 0:
+                        confirmations += 1
+                        logging.info(f"Signed-in account detected ({confirmations}/2 confirmations)...")
+                    else:
+                        confirmations = 0
+                        logging.info(f"Waiting for user to finish signing in... (current URL: {page.url[:80]})")
+                    if asyncio.get_event_loop().time() > deadline:
+                        raise TimeoutError("User never reached a logged-in Gemini chat (still anonymous or mid-login).")
+                    await page.wait_for_timeout(10000 if confirmations == 1 else 5000)
             except Exception as e:
                 logging.error("Timeout waiting for chat interface! Login might have failed or 2FA took too long.")
                 screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"

@@ -3,11 +3,11 @@ services:
     build: .
     container_name: gemini-agent
     ports:
-      - 0.0.0.0:8000:8000
+      - 127.0.0.1:8000:8000
     volumes:
       - .:/app
       - ./auth_state.json:/app/auth_state.json
-      - screenshots_data:/app/screenshots
+      - ./screenshots_host_access:/app/screenshots
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379/0
@@ -22,15 +22,9 @@ services:
     image: redis:alpine
     container_name: gemini-redis
     ports:
-      - 6379:6379
+      - 127.0.0.1:6379:6379
     volumes:
       - redis_data:/data
 
 volumes:
   redis_data:
-  screenshots_data:
-    driver: local
-    driver_opts:
-      o: bind
-      type: none
-      device: /home/user/Documentos/Github/gemini-web-mcp/screenshots_host_access

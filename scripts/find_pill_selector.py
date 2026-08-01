@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-BASE_DIR = Path("/home/user/Documentos/Github/gemini-web-mcp")
+BASE_DIR = Path(__file__).resolve().parent.parent
 USER_DATA_DIR = BASE_DIR / "profiles/default"
 CONFIG_FILE = BASE_DIR / "config/selectors.json"
 

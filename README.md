@@ -70,8 +70,6 @@ docker compose logs -f gemini-agent
 
 El servidor estará disponible en `http://localhost:8000`.
 
-```
-
 ### Herramientas Disponibles
 
 El agente expone varias herramientas para interactuar con Gemini. Para una guía detallada, consulta la [Referencia de Herramientas](doc/TOOLS.md).
@@ -149,7 +147,6 @@ El agente está diseñado para manejar tareas de larga duración (como Deep Rese
 Para más detalles, consulta:
 - [Arquitectura del Sistema](doc/ARCHITECTURE.md)
 - [Funcionamiento Asíncrono](doc/ASYNC_FLOW.md)
-- [Funcionamiento Asíncrono](doc/ASYNC_FLOW.md)
 
 ### Gestión Dinámica de Selectores
 
@@ -214,6 +211,7 @@ Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemen
 │   └── NATURAL_LANGUAGE.md     # Guía de uso con lenguaje natural
 ├── config/
 │   └── selectors.json          # Selectores CSS (la parte más frágil)
+├── .env.example                # Plantilla de variables de entorno
 ├── scripts/
 │   └── check_selectors.py      # Script de verificación para cron/manual
 ├── cron_setup.sh               # Instalador del cron job diario
@@ -226,9 +224,10 @@ Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemen
 
 ## 🔐 Seguridad
 
-- El directorio `profiles/` contiene cookies de sesión y datos de navegador sensibles.
-- **Nunca** compartas este directorio ni lo subas al repositorio (debería estar en `.gitignore`).
-- Para mayor seguridad, borra el directorio `profiles/` y regenera la autenticación periódicamente.
+- `auth_state.json` y el directorio `profiles/` contienen **cookies de sesión de Google**. Quien tenga esos archivos puede acceder a tu cuenta. Ambos están en `.gitignore` — **nunca** los subas al repositorio ni los compartas.
+- Las credenciales (`GOOGLE_EMAIL`, `GOOGLE_PASSWORD`) van únicamente en `.env` (también ignorado por git). Usa `.env.example` como plantilla.
+- Para mayor seguridad, borra `profiles/` y `auth_state.json` y regenera la autenticación periódicamente.
+- Si alguna vez commiteaste uno de estos archivos por accidente, no basta con borrarlo: reescribe el historial (p. ej. con `git filter-repo`) y **cierra las sesiones de tu cuenta de Google** (myaccount.google.com → Seguridad → Administrar dispositivos) o cambia tu contraseña para invalidar las cookies filtradas.
 
 ## 🛠️ Desarrollo
 

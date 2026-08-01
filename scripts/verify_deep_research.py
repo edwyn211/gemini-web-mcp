@@ -9,7 +9,7 @@ from playwright.async_api import async_playwright
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Paths
-BASE_DIR = Path("/home/user/Documentos/Github/gemini-web-mcp")
+BASE_DIR = Path(__file__).resolve().parent.parent
 AUTH_STATE_FILE = BASE_DIR / "auth_state.json"
 USER_DATA_DIR = BASE_DIR / "profiles/default"
 SCREENSHOTS_DIR = BASE_DIR / "debug_output" # Use local dir to avoid permission issues

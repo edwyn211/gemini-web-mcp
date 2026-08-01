@@ -2,5 +2,9 @@ __pycache__
 .venv
 .git
 auth_state.json
+profiles
+.env
+screenshots
+screenshots_host_access
 .idea
 .vscode

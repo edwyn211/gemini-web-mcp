@@ -1,9 +1,9 @@
 #!/bin/bash
 # Script to add daily selector verification to crontab
 
-USER="fix"
-SCRIPT_PATH="/home/$USER/Documentos/Github/gemini-web-mcp/scripts/check_selectors.py"
-LOG_PATH="/home/$USER/Documentos/Github/gemini-web-mcp/selector_check.log"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="$REPO_DIR/scripts/check_selectors.py"
+LOG_PATH="$REPO_DIR/selector_check.log"
 
 # Verify script exists
 if [ ! -f "$SCRIPT_PATH" ]; then

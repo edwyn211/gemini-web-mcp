@@ -8,10 +8,13 @@ env/
 venv/
 .venv/
 
-# Docker
+# Secretos y sesiones - NUNCA subir al repositorio
 auth_state.json
 profiles/
 .env
+.env.local
+*.log
+selector_check.log
 
 # IDEs
 .idea/

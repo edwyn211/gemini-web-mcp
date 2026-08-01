@@ -229,6 +229,10 @@ Al añadir `menu` como ancestro, te aseguras de que solo se seleccione el elemen
 - Para mayor seguridad, borra `profiles/` y `auth_state.json` y regenera la autenticación periódicamente.
 - Si alguna vez commiteaste uno de estos archivos por accidente, no basta con borrarlo: reescribe el historial (p. ej. con `git filter-repo`) y **cierra las sesiones de tu cuenta de Google** (myaccount.google.com → Seguridad → Administrar dispositivos) o cambia tu contraseña para invalidar las cookies filtradas.
 
+## 📄 Licencia
+
+Este proyecto está bajo la [licencia MIT](LICENSE) — puedes usarlo, modificarlo y redistribuirlo libremente.
+
 ## 🛠️ Desarrollo
 
 ### Ejecutar localmente (sin Docker)

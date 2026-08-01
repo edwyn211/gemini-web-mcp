@@ -26,8 +26,11 @@ def get_formatted_timestamp():
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-USER_DATA_DIR = Path("profiles/default")
-AUTH_STATE_FILE = Path("auth_state.json")
+# Anchored to this script's directory (the project root) so the profile and
+# auth state land in the repo no matter where the script is invoked from.
+PROJECT_ROOT = Path(__file__).resolve().parent
+USER_DATA_DIR = PROJECT_ROOT / "profiles" / "default"
+AUTH_STATE_FILE = PROJECT_ROOT / "auth_state.json"
 
 # Configurable Timeouts
 TIMEOUT_SELECTOR = int(os.getenv("AUTH_TIMEOUT_SELECTOR", 30000)) # Default 30s
@@ -161,7 +164,14 @@ async def main():
             context_kwargs["viewport"] = {'width': 1920, 'height': 1080}
         else:
             context_kwargs["no_viewport"] = True
-        context = await p.chromium.launch_persistent_context(**context_kwargs)
+        try:
+            context = await p.chromium.launch_persistent_context(**context_kwargs)
+        except Exception as launch_err:
+            # System Chrome is not available (e.g. inside the Docker container,
+            # which only ships Playwright's bundled Chromium). Retry without it.
+            logging.warning(f"Could not launch system Chrome ({launch_err}); falling back to bundled Chromium.")
+            context_kwargs.pop("channel", None)
+            context = await p.chromium.launch_persistent_context(**context_kwargs)
         
         # Determine if we should load auth state manually (backup to persistent context)
         if AUTH_STATE_FILE.exists():
@@ -239,7 +249,7 @@ async def main():
                     await page.wait_for_timeout(10000 if confirmations == 1 else 5000)
             except Exception as e:
                 logging.error("Timeout waiting for chat interface! Login might have failed or 2FA took too long.")
-                screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"
+                screenshot_dir = str(PROJECT_ROOT / "screenshots_host_access") if (PROJECT_ROOT / "screenshots_host_access").exists() else str(PROJECT_ROOT / "screenshots")
                 ts = get_formatted_timestamp()
                 path = f"{screenshot_dir}/auth_timeout_{ts}.png"
                 await page.screenshot(path=path)
@@ -250,7 +260,7 @@ async def main():
             await page.wait_for_timeout(3000)
 
             # Take a final success screenshot
-            screenshot_dir = "screenshots_host_access" if os.path.exists("screenshots_host_access") else "screenshots"
+            screenshot_dir = str(PROJECT_ROOT / "screenshots_host_access") if (PROJECT_ROOT / "screenshots_host_access").exists() else str(PROJECT_ROOT / "screenshots")
             try:
                 ts = get_formatted_timestamp()
                 path = f"{screenshot_dir}/auth_success_{ts}.png"
@@ -265,8 +275,8 @@ async def main():
             logging.info("\n✅ LOGIN SUCCESSFUL! The chat interface is visible.")
             
             # Export session to JSON
-            logging.info("Exporting session to 'auth_state.json' ...")
-            await context.storage_state(path="auth_state.json")
+            logging.info(f"Exporting session to '{AUTH_STATE_FILE}' ...")
+            await context.storage_state(path=str(AUTH_STATE_FILE))
             logging.info("Session exported successfully.")
             
         except Exception as e:

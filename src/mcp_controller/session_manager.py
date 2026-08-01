@@ -8,7 +8,9 @@ from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 from mcp_controller.actions import GeminiPageActions
 
 # Constants
-AUTH_STATE_PATH = Path("auth_state.json")
+# Anchored to the project root (src/mcp_controller/ -> parents[2]) so it does
+# not depend on the process working directory (/app inside Docker).
+AUTH_STATE_PATH = Path(__file__).resolve().parents[2] / "auth_state.json"
 
 logger = logging.getLogger(__name__)
 

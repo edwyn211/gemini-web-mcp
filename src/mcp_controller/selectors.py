@@ -179,9 +179,10 @@ def load_selectors(config_path: Path) -> GeminiSelectors:
     return GeminiSelectors(**data)
 
 
-# Define the default path to the selectors config relative to the project root
-# This assumes the script is run from the project root.
-CONFIG_PATH = Path("config/selectors.json")
+# Default path to the selectors config, anchored to the project root via
+# __file__ so it works regardless of the process working directory
+# (src/mcp_controller/selectors.py -> parents[2] == project root, /app in Docker).
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "selectors.json"
 
 
 class SelectorsManager:

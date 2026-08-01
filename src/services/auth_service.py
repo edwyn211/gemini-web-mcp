@@ -22,9 +22,12 @@ class AuthService:
     - Machine-specific salt + optional passphrase
     """
 
-    AUTH_STATE_PATH = Path("auth_state.json")
-    ENCRYPTED_PATH = Path("auth_state.encrypted")
-    SALT_PATH = Path(".auth_salt")
+    # Anchored to the project root (src/services/ -> parents[2]) so paths do
+    # not depend on the process working directory (/app inside Docker).
+    _PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    AUTH_STATE_PATH = _PROJECT_ROOT / "auth_state.json"
+    ENCRYPTED_PATH = _PROJECT_ROOT / "auth_state.encrypted"
+    SALT_PATH = _PROJECT_ROOT / ".auth_salt"
 
     def __init__(self, encryption_key: Optional[str] = None):
         """

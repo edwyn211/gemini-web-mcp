@@ -22,7 +22,10 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-AUTH_STATE_PATH = Path("auth_state.json")
+# Anchored to the project root (src/ -> parents[1]) so it does not depend on
+# the process working directory (/app inside Docker).
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+AUTH_STATE_PATH = PROJECT_ROOT / "auth_state.json"
 
 # Initialize FastMCP server with HTTP transport
 mcp = FastMCP("Gemini Web Agent")
@@ -719,7 +722,7 @@ async def refresh_gemini_auth() -> GenericResponse:
     """
     logging.info("♻️ Refreshing Gemini authentication...")
     
-    script_path = Path("./run_auth_remote.sh").resolve()
+    script_path = PROJECT_ROOT / "run_auth_remote.sh"
     if not script_path.exists():
         return GenericResponse(
             status="error", 

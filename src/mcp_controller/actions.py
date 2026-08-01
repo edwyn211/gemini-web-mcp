@@ -599,6 +599,72 @@ class GeminiPageActions:
         backoff_multiplier=1.5,
         exceptions=(PlaywrightTimeoutError, Exception),
     )
+    async def select_mode(self, mode: str) -> bool:
+        """
+        Opens the model/mode menu and selects the option matching `mode`.
+
+        The current Gemini UI exposes model versions (e.g. 'Flash-Lite', 'Flash',
+        'Pro') plus extras like 'Razonamiento ampliado' as `gem-menu-item`
+        entries inside the menu opened by `bard-mode-menu-button`. Matching is
+        done by case-insensitive substring against each item's text, preferring
+        the shortest matching item so 'flash' picks 'Flash' and not 'Flash-Lite'.
+
+        :param mode: Free-form query, e.g. 'pro', 'flash', 'flash-lite', 'razonamiento'.
+        :return: True if an option was clicked and the pill reflects the change.
+        """
+        query = mode.strip().lower()
+        logger.info(f"Selecting mode matching '{query}'...")
+
+        # Read the current pill text first; skip the menu entirely if it matches
+        try:
+            mode_element = await self._try_selectors("mode_selector", action="get_element")
+            current_mode = (await mode_element.inner_text()).strip()
+            if query in current_mode.lower():
+                logger.info(f"✓ Mode already matches ('{current_mode}')")
+                return True
+        except Exception:
+            current_mode = ""
+
+        # Open the mode menu
+        await self._try_selectors("mode_selector", action="click", force=True)
+        await self.page.wait_for_timeout(1500)
+
+        items = self.page.locator(
+            "gem-menu-item, [role='menuitemradio'], [role='menuitem'], .mat-mdc-menu-item"
+        )
+        count = await items.count()
+        candidates = []
+        for i in range(count):
+            try:
+                text = (await items.nth(i).inner_text()).strip()
+            except Exception:
+                continue
+            if text and query in text.lower():
+                candidates.append((len(text), i, text))
+
+        if not candidates:
+            logger.warning(f"✗ No menu option matches '{query}'. Closing menu.")
+            await self.page.keyboard.press("Escape")
+            return False
+
+        # Shortest matching text = most specific option for the query
+        _, idx, chosen_text = sorted(candidates)[0]
+        await items.nth(idx).click(force=True)
+        logger.info(f"Clicked mode option: '{chosen_text}'")
+        await self.page.wait_for_timeout(2000)
+
+        # Best-effort validation: the pill should now contain the query
+        try:
+            mode_element = await self._try_selectors("mode_selector", action="get_element")
+            new_mode = (await mode_element.inner_text()).strip()
+            if query in new_mode.lower():
+                logger.info(f"✓ Mode switched to '{new_mode}'")
+                return True
+            logger.warning(f"⚠ Pill shows '{new_mode}' after selecting '{chosen_text}'")
+        except Exception as e:
+            logger.warning(f"Could not validate mode change: {e}")
+        return True
+
     async def ensure_reasoning_mode(self):
         """
         Ensures that the 'Reasoning' (Razonamiento) model is selected.

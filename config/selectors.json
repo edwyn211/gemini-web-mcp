@@ -100,25 +100,29 @@
     ]
   },
   "deep_research_confirm_button": {
-    "primary": "button[data-test-id='confirm-button']",
+    "primary": "button:has-text('Empezar la investigación')",
     "fallbacks": [
-      "role=button[name*='Confirm' i]",
-      "role=button[name*='Confirmar' i]",
-      "button:has-text('Confirm')",
-      "button:has-text('Confirmar')",
+      "button:has-text('Start research')",
       "button:has-text('Iniciar investigación')",
-      "button:has-text('Start research')"
+      "button[data-test-id='confirm-button']",
+      "role=button[name*='Empezar la investigación' i]",
+      "role=button[name*='Start research' i]",
+      "role=button[name*='Confirm' i]",
+      "button:has-text('Confirm')",
+      "button:has-text('Confirmar')"
     ]
   },
   "deep_research_plan_ready": {
-    "primary": "button[data-test-id='confirm-button']",
+    "primary": "button:has-text('Empezar la investigación')",
     "fallbacks": [
-      "role=button[name*='Confirm' i]",
-      "role=button[name*='Confirmar' i]",
-      "button:has-text('Confirm')",
-      "button:has-text('Confirmar')",
+      "button:has-text('Start research')",
       "button:has-text('Iniciar investigación')",
-      "button:has-text('Start research')"
+      "button[data-test-id='confirm-button']",
+      "role=button[name*='Empezar la investigación' i]",
+      "role=button[name*='Start research' i]",
+      "role=button[name*='Confirm' i]",
+      "button:has-text('Confirm')",
+      "button:has-text('Confirmar')"
     ]
   },
   "mic_button": {

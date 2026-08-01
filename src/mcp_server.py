@@ -79,6 +79,12 @@ class TaskRequest(BaseModel):
         True,
         description="Whether to start a new chat session. Set to False to continue/monitor an existing session (e.g., waiting for Deep Research to finish).",
     )
+    mode: str | None = Field(
+        None,
+        description="Optional Gemini model/mode to select from the mode menu (matched by substring, e.g. 'pro', 'flash', 'flash-lite', 'razonamiento'). Defaults to the account's current mode.",
+        max_length=50,
+        examples=["pro", "flash", "razonamiento"],
+    )
 
     @field_validator('tasks')
     @classmethod
@@ -225,6 +231,7 @@ async def execute_tasks_workflow(
     tool: str | None = None,
     new_chat: bool = True,
     request_id: str | None = None,
+    mode: str | None = None,
 ) -> TaskResponse:
     """Execute a list of tasks using the Gemini agent workflow"""
     global session_manager, active_task_sessions
@@ -339,16 +346,20 @@ async def execute_tasks_workflow(
                         )
                     # Continue anyway, might still work
 
-                # Step 0: Ensure Reasoning mode is active (with retries built-in)
-                try:
-                    await gemini_actions.ensure_reasoning_mode()
-                except Exception as e:
-                    logging.error(f"❌ Failed to ensure Reasoning mode after retries: {e}")
-                    if screenshot_manager:
-                        await screenshot_manager.capture_error(
-                            gemini_actions.page, "ensure_reasoning_mode_workflow", e
-                        )
-                    # Continue anyway, might still work in current mode
+                # Step 0: Select the requested model/mode, if any.
+                # The old UI had a dedicated 'Razonamiento' mode that was forced
+                # here; current Gemini exposes model versions (Flash/Pro/...) so
+                # by default we respect the account's current mode.
+                if mode:
+                    try:
+                        await gemini_actions.select_mode(mode)
+                    except Exception as e:
+                        logging.error(f"❌ Failed to select mode '{mode}': {e}")
+                        if screenshot_manager:
+                            await screenshot_manager.capture_error(
+                                gemini_actions.page, "select_mode_workflow", e
+                            )
+                        # Continue anyway, might still work in current mode
 
                 # Step 1: Select tool if specified (with retries built-in)
                 if tool:
@@ -584,7 +595,7 @@ async def execute_tasks_workflow(
 
 @mcp.tool()
 async def execute_gemini_tasks(
-    tasks: List[str], tool: str | None = None, new_chat: bool = True
+    tasks: List[str], tool: str | None = None, new_chat: bool = True, mode: str | None = None
 ) -> TaskResponse:
     """
     Execute a list of tasks or queries using the Gemini Web Agent.
@@ -612,6 +623,9 @@ async def execute_gemini_tasks(
               - None: Uses standard chat mode (good for quick answers and simple logic).
         new_chat: Whether to start a new chat session. Defaults to True.
                   Set to False to continue/monitor an existing session (CRITICAL for Deep Research monitoring).
+        mode: Optional Gemini model/mode to select (substring match against the
+              mode menu, e.g. 'pro', 'flash', 'flash-lite', 'razonamiento').
+              Defaults to None = keep the account's current mode.
 
     Returns:
         TaskResponse object containing:
@@ -645,7 +659,7 @@ async def execute_gemini_tasks(
 
         # Launch background task
         asyncio.create_task(
-            execute_tasks_workflow(tasks, tool, new_chat, request_id=request_id)
+            execute_tasks_workflow(tasks, tool, new_chat, request_id=request_id, mode=mode)
         )
 
         return initial_response
@@ -1017,8 +1031,9 @@ async def create_tasks_endpoint(request):
         tasks = data.get("tasks", [])
         tool = data.get("tool", None)
         new_chat = data.get("new_chat", True)
+        mode = data.get("mode", None)
 
-        response = await execute_tasks_workflow(tasks, tool, new_chat)
+        response = await execute_tasks_workflow(tasks, tool, new_chat, mode=mode)
         return JSONResponse(response.model_dump())
     except Exception as e:
         logging.exception("An error occurred in the /tasks endpoint")

@@ -36,3 +36,14 @@ screenshots_host_access/*
 .agentMemory/
 AUDIT_REPORT.md
 requirements-dev.txt
+
+# ---- secretos: NADA de .env va al repo -----------------------------------
+# Ni el .env, ni la plantilla .env.tpl, ni el .env.sops cifrado. Lo unico que
+# se versiona es .env.example, y solo con valores de relleno.
+#
+# Los valores viven en 1Password (vault con el nombre del proyecto). Para
+# reconstruir el entorno en una maquina nueva:
+#     ~/github/secretos/publicar.sh <proyecto>
+.env
+.env.*
+!.env.example

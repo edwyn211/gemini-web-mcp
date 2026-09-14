@@ -1,0 +1,10 @@
+# Este repo viaja de Windows a un contenedor Linux: los finales de linea
+# se normalizan a LF siempre, sin depender del core.autocrlf de quien clone.
+* text=auto eol=lf
+
+# El shebang (#!/bin/bash) y el Dockerfile son especialmente sensibles: un
+# \r final rompe el interprete en Linux ("bad interpreter"). Sin este
+# archivo el repo se quedo sin red de seguridad y sus .sh acabaron con el
+# shebang roto.
+*.sh text eol=lf
+Dockerfile text eol=lf
